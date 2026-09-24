@@ -1,0 +1,6 @@
+{
+  "name": "Kainat Notes Hub - Matric, FSc & BSc Digital Notes Store",
+  "description": "Secure digital source notes platform for Matric, FSc, and BSc students with EasyPaisa checkout, screenshot verification, and protected watermark document reader.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
