@@ -184,13 +184,21 @@ export const CatalogSection: React.FC<CatalogSectionProps> = ({
                         src={note.coverImage}
                         alt={note.title}
                         referrerPolicy="no-referrer"
+                        onError={(e) => {
+                          e.currentTarget.style.display = 'none';
+                          const fallback = e.currentTarget.parentElement?.querySelector('.img-fallback');
+                          if (fallback) (fallback as HTMLElement).style.display = 'flex';
+                        }}
                         className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
                       />
-                    ) : (
-                      <div className="w-full h-full flex items-center justify-center bg-zinc-950 text-zinc-600">
-                        <BookOpen className="w-12 h-12" />
-                      </div>
-                    )}
+                    ) : null}
+                    <div
+                      className={`img-fallback w-full h-full items-center justify-center bg-gradient-to-br from-zinc-900 to-zinc-950 text-zinc-600 ${
+                        note.coverImage ? 'hidden' : 'flex'
+                      }`}
+                    >
+                      <BookOpen className="w-12 h-12 text-emerald-500/40" />
+                    </div>
                     <div className="absolute inset-0 bg-gradient-to-t from-zinc-950 via-zinc-950/20 to-transparent" />
 
                     {/* Unlocked / Bundle Indicator */}

@@ -32,6 +32,23 @@ import {
 } from 'lucide-react';
 import { KainatLogo } from './KainatLogo';
 import { sound } from '../utils/soundEffects';
+import {
+  apiAdminLogin,
+  apiGetOrders,
+  apiVerifyOrder,
+  apiRejectOrder,
+  apiGrantCourse,
+  apiRevokeCourse,
+  apiUploadImage,
+  apiSaveSettings,
+  apiSaveNote,
+  apiDeleteNote,
+  apiGetDatabaseStatus,
+  apiTestMongo,
+  apiExportDatabaseBackup,
+  apiRestoreDatabaseBackup,
+  apiCreateOrder,
+} from '../services/apiClient';
 
 interface AdminPortalProps {
   onClose: () => void;
@@ -175,13 +192,10 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
   const fetchAdminData = async () => {
     try {
       setLoading(true);
-      const res = await fetch('/api/admin/orders');
-      const data = await res.json();
-      if (data.success) {
-        setOrders(data.orders);
-        setStats(data.stats);
-        setNotifications(data.notifications || []);
-      }
+      const data = await apiGetOrders();
+      setOrders(data.orders || []);
+      setStats(data.stats || { totalOrders: 0, pendingOrders: 0, verifiedOrders: 0, totalRevenuePKR: 0 });
+      setNotifications(data.notifications || []);
     } catch (err) {
       console.error('Error fetching admin data:', err);
     } finally {
@@ -191,9 +205,8 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
 
   const fetchDbStatus = async () => {
     try {
-      const res = await fetch('/api/admin/database/status');
-      const data = await res.json();
-      if (data.success) {
+      const data = await apiGetDatabaseStatus();
+      if (data && data.success) {
         setDbStorageInfo(data);
       }
     } catch {
@@ -214,17 +227,8 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
     setLoginError('');
 
     try {
-      const res = await fetch('/api/admin/login', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          username: usernameInput.trim(),
-          password: passwordInput.trim(),
-        }),
-      });
-
-      const data = await res.json();
-      if (res.ok && data.success) {
+      const data = await apiAdminLogin(usernameInput, passwordInput);
+      if (data.success) {
         sound.verified();
         onAuthenticate(true);
       } else {
@@ -233,7 +237,7 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
       }
     } catch {
       sound.alert();
-      setLoginError('Server connection error. Please try again.');
+      setLoginError('Authentication check failed. Please verify credentials.');
     }
   };
 
@@ -244,8 +248,7 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
   // Verify Order Payment
   const handleVerifyOrder = async (orderId: string) => {
     try {
-      const res = await fetch(`/api/admin/orders/${orderId}/verify`, { method: 'POST' });
-      const data = await res.json();
+      const data = await apiVerifyOrder(orderId);
       if (data.success) {
         sound.verified();
         showNotification(`Order #${orderId} verified! Course unlocked for student.`);
@@ -255,15 +258,14 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
         showNotification(data.message || 'Verification failed.', true);
       }
     } catch {
-      showNotification('Network error while verifying.', true);
+      showNotification('Error while verifying payment.', true);
     }
   };
 
   // Reject Order Payment
   const handleRejectOrder = async (orderId: string) => {
     try {
-      const res = await fetch(`/api/admin/orders/${orderId}/reject`, { method: 'POST' });
-      const data = await res.json();
+      const data = await apiRejectOrder(orderId);
       if (data.success) {
         showNotification(`Order #${orderId} marked as rejected.`);
         fetchAdminData();
@@ -272,31 +274,27 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
         showNotification(data.message || 'Action failed.', true);
       }
     } catch {
-      showNotification('Network error.', true);
+      showNotification('Error rejecting order.', true);
     }
   };
 
   // Simulate Order for Kainat Testing
   const handleSimulateNewOrder = async () => {
     try {
-      const randomId = `sim-${Date.now().toString().slice(-4)}`;
       const sampleNotes = [allNotes[0] || { id: 'sample-1', title: 'Sample Physics Unit 1', pricePKR: 199 }];
-      const res = await fetch('/api/orders', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          studentName: 'Ayesha Khan (Student)',
-          studentEmail: 'ayesha.student@gmail.com',
-          studentPhone: '0300 1234567',
-          notes: sampleNotes,
-          trxId: `EP-${Date.now().toString().slice(-6)}`,
-          paymentMethod: 'easypaisa',
-          easypaisaAccount: settings.easyPaisaNumber,
-          screenshotUrl: 'https://images.unsplash.com/photo-1554224155-6726b3ff858f?auto=format&fit=crop&q=80&w=400',
-        }),
+      const data = await apiCreateOrder({
+        studentName: 'Ayesha Khan (Student)',
+        studentEmail: 'ayesha.student@gmail.com',
+        studentPhone: '0300 1234567',
+        noteIds: sampleNotes.map((n) => n.id),
+        noteTitles: sampleNotes.map((n) => n.title),
+        totalAmountPKR: sampleNotes.reduce((s, n) => s + (n.pricePKR || 0), 0),
+        trxId: `EP-${Date.now().toString().slice(-6)}`,
+        paymentMethod: 'easypaisa',
+        easypaisaAccount: settings.easyPaisaNumber,
+        screenshotUrl: 'https://images.unsplash.com/photo-1554224155-6726b3ff858f?auto=format&fit=crop&q=80&w=400',
       });
 
-      const data = await res.json();
       if (data.success) {
         sound.order();
         showNotification(`Simulated Order #${data.order.id} generated for verification testing!`);
@@ -312,48 +310,38 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
   const handleGrantCourse = async (orderId: string) => {
     if (!courseToGrant) return;
     try {
-      const res = await fetch(`/api/admin/orders/${orderId}/grant-course`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ noteId: courseToGrant }),
-      });
-      const data = await res.json();
+      const data = await apiGrantCourse(orderId, courseToGrant);
       if (data.success) {
         showNotification(`Course access successfully granted to student!`);
         fetchAdminData();
         onRefreshData();
-        if (selectedStudentOrder) {
+        if (selectedStudentOrder && data.order) {
           setSelectedStudentOrder(data.order);
         }
       } else {
         showNotification(data.message || 'Error granting course.', true);
       }
     } catch {
-      showNotification('Server error granting course.', true);
+      showNotification('Error granting course.', true);
     }
   };
 
   // Revoke Course Access from Student
   const handleRevokeCourse = async (orderId: string, noteId: string) => {
     try {
-      const res = await fetch(`/api/admin/orders/${orderId}/revoke-course`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ noteId }),
-      });
-      const data = await res.json();
+      const data = await apiRevokeCourse(orderId, noteId);
       if (data.success) {
         showNotification(`Course access revoked.`);
         fetchAdminData();
         onRefreshData();
-        if (selectedStudentOrder) {
+        if (selectedStudentOrder && data.order) {
           setSelectedStudentOrder(data.order);
         }
       } else {
         showNotification(data.message || 'Error revoking course.', true);
       }
     } catch {
-      showNotification('Server error revoking course.', true);
+      showNotification('Error revoking course.', true);
     }
   };
 
@@ -367,37 +355,15 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
       const reader = new FileReader();
       reader.onload = async () => {
         const base64Data = reader.result as string;
-
-        const uploadRes = await fetch('/api/upload', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            dataUrl: base64Data,
-            fileName: 'logo_' + Date.now(),
-          }),
-        });
-
-        const uploadData = await uploadRes.json();
-        if (!uploadData.success || !uploadData.url) {
-          showNotification(uploadData.message || 'Logo upload failed.', true);
-          setIsUploadingLogo(false);
-          return;
-        }
-
+        const uploadData = await apiUploadImage(base64Data, 'logo_' + Date.now());
         const newLogoUrl = uploadData.url;
         setLogoPreview(newLogoUrl);
 
         const newSettings = { ...settings, logoUrl: newLogoUrl };
-        const saveRes = await fetch('/api/settings', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(newSettings),
-        });
-
-        const saveData = await saveRes.json();
+        const saveData = await apiSaveSettings(newSettings);
         if (saveData.success) {
           onUpdateSettings(saveData.settings);
-          showNotification(`Logo uploaded and saved to server storage!`);
+          showNotification(`Logo uploaded and saved to website branding!`);
           sound.verified();
           onRefreshData();
         } else {
@@ -417,13 +383,7 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
     try {
       setIsSavingSettings(true);
       const newSettings = { ...settings, logoUrl: '' };
-      const res = await fetch('/api/settings', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(newSettings),
-      });
-
-      const data = await res.json();
+      const data = await apiSaveSettings(newSettings);
       if (data.success) {
         setLogoPreview('');
         onUpdateSettings(data.settings);
@@ -450,13 +410,7 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
         mongoDbUri: mongoUriInput.trim(),
       };
 
-      const res = await fetch('/api/settings', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(newSettings),
-      });
-
-      const data = await res.json();
+      const data = await apiSaveSettings(newSettings);
       if (data.success) {
         onUpdateSettings(data.settings);
         showNotification('Brand & contact details saved successfully!');
@@ -472,7 +426,7 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
     }
   };
 
-  // Handle Note Cover Upload (Save to /uploads/)
+  // Handle Note Cover Upload (Save to /uploads/ or local storage)
   const handleNoteCoverUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -482,19 +436,10 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
       const reader = new FileReader();
       reader.onload = async () => {
         const base64Data = reader.result as string;
-        const uploadRes = await fetch('/api/upload', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            dataUrl: base64Data,
-            fileName: 'note_cover_' + Date.now(),
-          }),
-        });
-
-        const uploadData = await uploadRes.json();
+        const uploadData = await apiUploadImage(base64Data, 'note_cover_' + Date.now());
         if (uploadData.success && uploadData.url) {
           setNoteForm((prev) => ({ ...prev, coverImage: uploadData.url }));
-          showNotification(`Cover picture uploaded and saved to ${uploadData.url}!`);
+          showNotification(`Cover picture uploaded successfully!`);
         } else {
           showNotification(uploadData.message || 'Upload failed.', true);
         }
@@ -526,28 +471,16 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
 
     try {
       setIsSubmittingNote(true);
-      let res;
-      if (editNoteId) {
-        res = await fetch(`/api/admin/notes/${editNoteId}`, {
-          method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(noteForm),
-        });
-      } else {
-        res = await fetch('/api/admin/notes', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(noteForm),
-        });
-      }
-
-      const data = await res.json();
+      const notePayload = {
+        ...noteForm,
+        topicsCovered: noteForm.topicsCovered
+          ? noteForm.topicsCovered.split(',').map((t) => t.trim()).filter(Boolean)
+          : [],
+      };
+      const data = await apiSaveNote(notePayload, editNoteId);
       if (data.success) {
-        showNotification(
-          editNoteId
-            ? `Note "${noteForm.title}" updated successfully!`
-            : `New Note "${noteForm.title}" created by Kainat!`
-        );
+        showNotification(data.message || 'Note saved successfully!');
+        sound.verified();
         setIsEditingNote(false);
         setEditNoteId(null);
         setNoteForm({
@@ -569,7 +502,7 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
         showNotification(data.message || 'Error saving note.', true);
       }
     } catch {
-      showNotification('Server communication error saving note.', true);
+      showNotification('Error saving note.', true);
     } finally {
       setIsSubmittingNote(false);
     }
@@ -583,10 +516,10 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
     }
 
     try {
-      const res = await fetch(`/api/admin/notes/${id}`, { method: 'DELETE' });
-      const data = await res.json();
+      const data = await apiDeleteNote(id);
       if (data.success) {
         showNotification(`Note "${title}" deleted successfully.`);
+        sound.verified();
         setDeleteConfirmId(null);
         onRefreshData();
         fetchDbStatus();
@@ -594,7 +527,7 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
         showNotification(data.message || 'Error deleting note.', true);
       }
     } catch {
-      showNotification('Server error deleting note.', true);
+      showNotification('Error deleting note.', true);
     }
   };
 
@@ -627,18 +560,13 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
 
     try {
       setIsTestingMongo(true);
-      const res = await fetch('/api/admin/database/test-mongo', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ uri: mongoUriInput.trim() }),
-      });
-      const data = await res.json();
+      const data = await apiTestMongo(mongoUriInput.trim());
       if (data.success) {
-        showNotification(`MongoDB Connected & Synced: ${data.message}`);
+        showNotification(`MongoDB Status: ${data.message}`);
         sound.verified();
         fetchDbStatus();
       } else {
-        showNotification(`MongoDB Connection Note: ${data.message}`, true);
+        showNotification(`MongoDB Note: ${data.message}`, true);
       }
     } catch {
       showNotification('Failed to test MongoDB connection.', true);
@@ -656,14 +584,7 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
       setIsRestoringDb(true);
       const text = await file.text();
       const jsonData = JSON.parse(text);
-
-      const res = await fetch('/api/admin/database/restore', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ data: jsonData }),
-      });
-
-      const result = await res.json();
+      const result = await apiRestoreDatabaseBackup(jsonData);
       if (result.success) {
         showNotification('Database successfully restored from JSON backup!');
         sound.verified();
@@ -2109,9 +2030,9 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
                 </div>
 
                 <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2.5">
-                  <a
-                    href="/api/admin/database/export"
-                    download={`kainat_notes_hub_backup_${Date.now()}.json`}
+                  <button
+                    type="button"
+                    onClick={() => apiExportDatabaseBackup()}
                     className={`px-4 py-2.5 rounded-lg text-xs font-semibold border transition-colors flex items-center justify-center gap-2 ${
                       isLight
                         ? 'bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border-emerald-300'
@@ -2120,7 +2041,7 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
                   >
                     <Download className="w-3.5 h-3.5" />
                     <span>Download Complete JSON Backup</span>
-                  </a>
+                  </button>
 
                   <label className={`px-4 py-2.5 rounded-lg text-xs font-semibold border transition-colors flex items-center justify-center gap-2 cursor-pointer ${
                     isLight

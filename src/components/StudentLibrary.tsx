@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { NoteItem, Order } from '../types';
 import { BookOpen, ShieldCheck, Key } from 'lucide-react';
+import { apiLookupOrders } from '../services/apiClient';
 
 interface StudentLibraryProps {
   unlockedOrders: Order[];
@@ -30,8 +31,7 @@ export const StudentLibrary: React.FC<StudentLibraryProps> = ({
 
     try {
       setLoadError('');
-      const res = await fetch(`/api/orders/lookup?query=${encodeURIComponent(accessCodeInput.trim())}`);
-      const data = await res.json();
+      const data = await apiLookupOrders(accessCodeInput.trim());
       if (data.success && data.orders.length > 0) {
         const verified = data.orders.filter((o: Order) => o.status === 'verified');
         if (verified.length > 0) {

@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Order, NoteItem } from '../types';
 import { Search, CheckCircle2, Clock, AlertCircle, BookOpen, Send, ShieldCheck, RefreshCw } from 'lucide-react';
 import { sound } from '../utils/soundEffects';
+import { apiLookupOrders, getStoredOrders } from '../services/apiClient';
 
 interface OrderTrackerProps {
   orders: Order[];
@@ -27,8 +28,7 @@ export const OrderTracker: React.FC<OrderTrackerProps> = ({
     try {
       setLoading(true);
       setStatusMessage('');
-      const res = await fetch(`/api/orders/lookup?query=${encodeURIComponent(searchQuery.trim())}`);
-      const data = await res.json();
+      const data = await apiLookupOrders(searchQuery.trim());
 
       if (data.success && data.orders.length > 0) {
         setActiveOrder(data.orders[0]);
@@ -36,7 +36,7 @@ export const OrderTracker: React.FC<OrderTrackerProps> = ({
         setStatusMessage('No orders found matching that Order ID or Email. Please check your spelling.');
       }
     } catch {
-      setStatusMessage('Network error searching orders.');
+      setStatusMessage('Error searching orders.');
     } finally {
       setLoading(false);
     }
@@ -48,18 +48,18 @@ export const OrderTracker: React.FC<OrderTrackerProps> = ({
 
     const interval = setInterval(async () => {
       try {
-        const res = await fetch(`/api/orders/${activeOrder.id}`);
-        const data = await res.json();
-        if (data.success && data.order) {
-          if (data.order.status === 'verified' && activeOrder.status === 'pending') {
+        const stored = getStoredOrders();
+        const updated = stored.find((o) => o.id === activeOrder.id);
+        if (updated) {
+          if (updated.status === 'verified' && activeOrder.status === 'pending') {
             sound.playVerificationChime();
           }
-          setActiveOrder(data.order);
+          setActiveOrder(updated);
         }
       } catch {
         // silent polling catch
       }
-    }, 4000);
+    }, 3000);
 
     return () => clearInterval(interval);
   }, [activeOrder]);

@@ -24,7 +24,7 @@ export const initialNotesCatalog: NoteItem[] = [
     ],
     googleDriveUrl: 'https://drive.google.com/file/d/1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs/preview',
     googleDriveFileId: '1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs',
-    coverImage: '/src/assets/images/matric_notes_cover_1790249191068.jpg',
+    coverImage: '/images/matric_notes_cover_1790249191068.jpg',
     previewPages: [
       {
         pageNumber: 1,
@@ -134,7 +134,7 @@ export const initialNotesCatalog: NoteItem[] = [
     ],
     googleDriveUrl: 'https://drive.google.com/file/d/1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs/preview',
     googleDriveFileId: '1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs',
-    coverImage: '/src/assets/images/matric_notes_cover_1790249191068.jpg',
+    coverImage: '/images/matric_notes_cover_1790249191068.jpg',
     previewPages: [
       {
         pageNumber: 1,
@@ -196,7 +196,7 @@ export const initialNotesCatalog: NoteItem[] = [
     ],
     googleDriveUrl: 'https://drive.google.com/file/d/1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs/preview',
     googleDriveFileId: '1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs',
-    coverImage: '/src/assets/images/matric_notes_cover_1790249191068.jpg',
+    coverImage: '/images/matric_notes_cover_1790249191068.jpg',
     previewPages: [
       {
         pageNumber: 1,
@@ -261,7 +261,7 @@ export const initialNotesCatalog: NoteItem[] = [
     ],
     googleDriveUrl: 'https://drive.google.com/file/d/1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs/preview',
     googleDriveFileId: '1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs',
-    coverImage: '/src/assets/images/fsc_notes_cover_1790249204208.jpg',
+    coverImage: '/images/fsc_notes_cover_1790249204208.jpg',
     previewPages: [
       {
         pageNumber: 1,
@@ -337,7 +337,7 @@ export const initialNotesCatalog: NoteItem[] = [
     ],
     googleDriveUrl: 'https://drive.google.com/file/d/1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs/preview',
     googleDriveFileId: '1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs',
-    coverImage: '/src/assets/images/fsc_notes_cover_1790249204208.jpg',
+    coverImage: '/images/fsc_notes_cover_1790249204208.jpg',
     previewPages: [
       {
         pageNumber: 1,
@@ -403,7 +403,7 @@ export const initialNotesCatalog: NoteItem[] = [
     ],
     googleDriveUrl: 'https://drive.google.com/file/d/1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs/preview',
     googleDriveFileId: '1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs',
-    coverImage: '/src/assets/images/fsc_notes_cover_1790249204208.jpg',
+    coverImage: '/images/fsc_notes_cover_1790249204208.jpg',
     previewPages: [
       {
         pageNumber: 1,
@@ -482,7 +482,7 @@ export const initialNotesCatalog: NoteItem[] = [
     ],
     googleDriveUrl: 'https://drive.google.com/file/d/1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs/preview',
     googleDriveFileId: '1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs',
-    coverImage: '/src/assets/images/fsc_notes_cover_1790249204208.jpg',
+    coverImage: '/images/fsc_notes_cover_1790249204208.jpg',
     previewPages: [
       {
         pageNumber: 1,
@@ -561,7 +561,7 @@ export const initialNotesCatalog: NoteItem[] = [
     ],
     googleDriveUrl: 'https://drive.google.com/file/d/1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs/preview',
     googleDriveFileId: '1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs',
-    coverImage: '/src/assets/images/bsc_notes_cover_1790249216045.jpg',
+    coverImage: '/images/bsc_notes_cover_1790249216045.jpg',
     previewPages: [
       {
         pageNumber: 1,
@@ -639,7 +639,7 @@ export const initialNotesCatalog: NoteItem[] = [
     ],
     googleDriveUrl: 'https://drive.google.com/file/d/1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs/preview',
     googleDriveFileId: '1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs',
-    coverImage: '/src/assets/images/bsc_notes_cover_1790249216045.jpg',
+    coverImage: '/images/bsc_notes_cover_1790249216045.jpg',
     previewPages: [
       {
         pageNumber: 1,
@@ -717,7 +717,7 @@ export const initialNotesCatalog: NoteItem[] = [
     ],
     googleDriveUrl: 'https://drive.google.com/file/d/1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs/preview',
     googleDriveFileId: '1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs',
-    coverImage: '/src/assets/images/fsc_notes_cover_1790249204208.jpg',
+    coverImage: '/images/fsc_notes_cover_1790249204208.jpg',
     previewPages: [
       {
         pageNumber: 1,

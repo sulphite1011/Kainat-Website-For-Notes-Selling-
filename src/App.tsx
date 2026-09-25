@@ -5,7 +5,6 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { NoteItem, Order, SiteSettings } from './types';
-import { initialNotesCatalog } from './data/notesCatalog';
 import { Navbar } from './components/Navbar';
 import { Hero } from './components/Hero';
 import { CatalogSection } from './components/CatalogSection';
@@ -17,22 +16,21 @@ import { StudentLibrary } from './components/StudentLibrary';
 import { AdminPortal } from './components/AdminPortal';
 import { RealtimeAlertBanner } from './components/RealtimeAlertBanner';
 import { Footer } from './components/Footer';
-
-const defaultSettings: SiteSettings = {
-  siteName: 'Kainat Notes Hub',
-  ownerName: 'Kainat',
-  logoUrl: '',
-  easyPaisaNumber: '03415892099',
-  whatsAppNumber: '0324 9059918',
-  ownerEmail: 'ka8984510@gmail.com',
-};
+import {
+  getStoredNotes,
+  getStoredSettings,
+  getStoredOrders,
+  apiGetNotes,
+  apiGetSettings,
+  defaultSettings,
+} from './services/apiClient';
 
 export default function App() {
   const [activeTab, setActiveTab] = useState<string>('catalog');
-  const [notes, setNotes] = useState<NoteItem[]>(initialNotesCatalog);
+  const [notes, setNotes] = useState<NoteItem[]>(getStoredNotes);
   const [cart, setCart] = useState<NoteItem[]>([]);
-  const [orders, setOrders] = useState<Order[]>([]);
-  const [settings, setSettings] = useState<SiteSettings>(defaultSettings);
+  const [orders, setOrders] = useState<Order[]>(getStoredOrders);
+  const [settings, setSettings] = useState<SiteSettings>(getStoredSettings);
   const [isAdminAuthenticated, setIsAdminAuthenticated] = useState<boolean>(() => {
     try {
       return sessionStorage.getItem('kainat_admin_auth') === 'true';
@@ -107,11 +105,8 @@ export default function App() {
   // Fetch site settings (Logo & contact info)
   const fetchSettings = useCallback(async () => {
     try {
-      const res = await fetch('/api/settings');
-      const data = await res.json();
-      if (data.success && data.settings) {
-        setSettings(data.settings);
-      }
+      const data = await apiGetSettings();
+      setSettings(data);
     } catch {
       // fallback to default
     }
@@ -121,14 +116,12 @@ export default function App() {
     fetchSettings();
   }, [fetchSettings]);
 
-  // Fetch latest notes from API
+  // Fetch latest notes
   const refreshNotes = useCallback(async () => {
     try {
-      const res = await fetch('/api/notes');
-      const data = await res.json();
-      if (data.success && data.notes) {
-        // If API notes has items, populate them
-        setNotes(data.notes);
+      const notesList = await apiGetNotes();
+      if (Array.isArray(notesList) && notesList.length > 0) {
+        setNotes(notesList);
       }
     } catch (e) {
       console.warn('Using local catalog fallback:', e);

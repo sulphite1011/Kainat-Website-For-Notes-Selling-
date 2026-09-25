@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { NoteItem } from '../types';
+import { NoteItem, NotePage } from '../types';
 import { 
   X, 
   ChevronLeft, 
@@ -42,9 +42,9 @@ export const SecureDocumentViewer: React.FC<SecureDocumentViewerProps> = ({
   const containerRef = useRef<HTMLDivElement>(null);
 
   // Combine preview & full content pages safely
-  const allPages = note.fullContentPages && note.fullContentPages.length > 0 
+  const allPages: NotePage[] = (note.fullContentPages && note.fullContentPages.length > 0 
     ? note.fullContentPages 
-    : note.previewPages;
+    : note.previewPages) || [];
   const activePage = allPages[currentPageIndex] || allPages[0];
 
   // 1. Anti-Screenshot & Screen Capture Detection via Window Blur & Visibility

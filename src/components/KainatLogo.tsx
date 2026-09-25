@@ -14,9 +14,10 @@ export const KainatLogo: React.FC<KainatLogoProps> = ({
   theme = 'dark',
 }) => {
   const isLight = theme === 'light';
+  const [imgError, setImgError] = React.useState(false);
 
   // If Kainat uploaded a custom picture for the logo, show it
-  if (customLogoUrl && customLogoUrl.trim() !== '') {
+  if (customLogoUrl && customLogoUrl.trim() !== '' && !imgError) {
     const sizeClasses = {
       sm: 'h-7 w-auto object-contain rounded',
       md: 'h-9 w-auto max-w-[170px] object-contain rounded-md',
@@ -29,6 +30,7 @@ export const KainatLogo: React.FC<KainatLogoProps> = ({
           src={customLogoUrl}
           alt="Kainat Notes Logo"
           referrerPolicy="no-referrer"
+          onError={() => setImgError(true)}
           className={`${sizeClasses} ${isLight ? 'border border-slate-200' : 'border border-zinc-700/60'} shadow-sm`}
         />
         {showSubtitle && (

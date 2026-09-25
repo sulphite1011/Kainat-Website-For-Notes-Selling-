@@ -43,8 +43,8 @@ export interface NoteItem {
   googleDriveUrl: string;
   googleDriveFileId?: string;
   coverImage?: string;
-  previewPages: NotePage[];
-  fullContentPages: NotePage[];
+  previewPages?: NotePage[];
+  fullContentPages?: NotePage[];
 }
 
 export interface Order {

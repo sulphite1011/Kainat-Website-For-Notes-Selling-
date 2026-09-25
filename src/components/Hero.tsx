@@ -84,7 +84,7 @@ export const Hero: React.FC<HeroProps> = ({ onSelectCategory, onOpenTrack }) => 
           <div className="lg:col-span-5">
             <div className="relative rounded-2xl overflow-hidden border border-zinc-800 bg-zinc-900 shadow-2xl group">
               <img
-                src="/src/assets/images/hero_notes_showcase_1790249177382.jpg"
+                src="/images/hero_notes_showcase_1790249177382.jpg"
                 alt="Comprehensive scientific source notes by Kainat"
                 referrerPolicy="no-referrer"
                 className="w-full h-72 sm:h-80 object-cover group-hover:scale-105 transition-transform duration-500"

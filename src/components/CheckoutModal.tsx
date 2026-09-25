@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { NoteItem, Order } from '../types';
 import { X, Copy, Check, Smartphone, Upload, Send, ArrowRight, CheckCircle2 } from 'lucide-react';
+import { apiUploadImage, apiCreateOrder } from '../services/apiClient';
 
 interface CheckoutModalProps {
   cartNotes: NoteItem[];
@@ -51,22 +52,14 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
         setScreenshotPreview(rawBase64);
         setErrorMessage('');
 
-        // Also upload to permanent server disk /uploads/
+        // Attempt upload or keep base64 fallback
         try {
-          const uploadRes = await fetch('/api/upload', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              dataUrl: rawBase64,
-              fileName: 'easypaisa_proof'
-            })
-          });
-          const uploadData = await uploadRes.json();
+          const uploadData = await apiUploadImage(rawBase64, 'easypaisa_proof_' + Date.now());
           if (uploadData.success && uploadData.url) {
             setScreenshotPreview(uploadData.url);
           }
         } catch {
-          // fallback to base64 if network blips
+          // fallback to base64
         }
       };
       reader.readAsDataURL(file);
@@ -89,26 +82,31 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
 
     try {
       setLoading(true);
-      const res = await fetch('/api/orders', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          studentName: studentName.trim(),
-          studentEmail: studentEmail.trim(),
-          studentPhone: studentPhone.trim(),
-          noteIds: cartNotes.map((n) => n.id),
-          trxId: trxId.trim(),
-          screenshotUrl: screenshotPreview || '',
-        }),
+      const data = await apiCreateOrder({
+        studentName: studentName.trim(),
+        studentEmail: studentEmail.trim(),
+        studentPhone: studentPhone.trim(),
+        noteIds: cartNotes.map((n) => n.id),
+        noteTitles: cartNotes.map((n) => n.title),
+        totalAmountPKR: totalAmountPKR,
+        paymentMethod: 'easypaisa',
+        easypaisaAccount: easyPaisaAccount,
+        trxId: trxId.trim(),
+        screenshotUrl: screenshotPreview || '',
       });
 
-      const data = await res.json();
-      if (!res.ok || !data.success) {
+      if (!data.success || !data.order) {
         throw new Error(data.message || 'Failed to submit order. Please check inputs.');
       }
 
+      const formattedWhatsAppPhone = whatsAppNumber.replace(/[^0-9]/g, '');
+      const notesListText = cartNotes.map((n) => `• ${n.title}`).join('%0A');
+      const waUrl = `https://api.whatsapp.com/send?phone=${formattedWhatsAppPhone}&text=${encodeURIComponent(
+        `Assalam-o-Alaikum Kainat! I have placed Order #${data.order.id} on Kainat Notes Hub.%0A%0AStudent Name: ${data.order.studentName}%0AEmail: ${data.order.studentEmail}%0AEasyPaisa Trx ID: ${data.order.trxId}%0ATotal Amount: Rs. ${data.order.totalAmountPKR}%0A%0ACourses Ordered:%0A${notesListText}%0A%0APlease verify my payment and unlock my notes.`
+      )}`;
+
       setSubmittedOrder(data.order);
-      setWhatsappUrl(data.whatsappUrl);
+      setWhatsappUrl(waUrl);
       onOrderCreated(data.order);
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'Network error submitting order';
