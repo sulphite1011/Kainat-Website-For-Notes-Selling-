@@ -16,7 +16,7 @@ import {
   ExternalLink,
   BookOpen
 } from 'lucide-react';
-import { formatGoogleDrivePreviewUrl, isDriveOrPdfUrl } from '../utils/driveUrlHelper';
+import { formatGoogleDrivePreviewUrl, isDriveOrPdfUrl, getDirectDriveViewUrl } from '../utils/driveUrlHelper';
 
 interface SecureDocumentViewerProps {
   note: NoteItem;
@@ -386,12 +386,12 @@ export const SecureDocumentViewer: React.FC<SecureDocumentViewerProps> = ({
                 <div className="flex items-center gap-3">
                   {note.googleDriveUrl && (
                     <a
-                      href={note.googleDriveUrl}
+                      href={getDirectDriveViewUrl(note.googleDriveUrl)}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="flex items-center gap-1.5 px-3 py-1 bg-emerald-600/90 hover:bg-emerald-500 text-white rounded-md text-xs font-semibold shadow-sm transition-colors"
+                      className="flex items-center gap-1.5 px-3 py-1 bg-emerald-600 hover:bg-emerald-500 text-white rounded-md text-xs font-semibold shadow-sm transition-colors"
                     >
-                      <span>Open Drive Window</span>
+                      <span>Open Drive in New Tab</span>
                       <ExternalLink className="w-3.5 h-3.5" />
                     </a>
                   )}
@@ -399,15 +399,30 @@ export const SecureDocumentViewer: React.FC<SecureDocumentViewerProps> = ({
               </div>
 
               {/* PDF Preview Frame */}
-              <div className="relative flex-1 w-full h-full bg-zinc-950">
+              <div className="relative flex-1 w-full h-full bg-zinc-950 flex flex-col">
                 {note.googleDriveUrl ? (
-                  <iframe
-                    src={formatGoogleDrivePreviewUrl(note.googleDriveUrl)}
-                    title={note.title}
-                    className="w-full h-full border-0"
-                    allow="autoplay"
-                    sandbox="allow-scripts allow-same-origin allow-popups"
-                  />
+                  <>
+                    <iframe
+                      src={formatGoogleDrivePreviewUrl(note.googleDriveUrl)}
+                      title={note.title}
+                      className="w-full flex-1 border-0"
+                      allow="autoplay"
+                      sandbox="allow-scripts allow-same-origin allow-popups"
+                    />
+                    {/* Fallback bar if iframe is blocked by 3rd-party cookie policies */}
+                    <div className="px-4 py-1.5 bg-zinc-900 border-t border-zinc-800 text-[11px] text-zinc-400 flex items-center justify-between shrink-0">
+                      <span>Unable to load inside frame? (Google third-party cookie restriction)</span>
+                      <a
+                        href={getDirectDriveViewUrl(note.googleDriveUrl)}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-emerald-400 font-semibold hover:underline flex items-center gap-1"
+                      >
+                        <span>Click here to open PDF directly</span>
+                        <ExternalLink className="w-3 h-3" />
+                      </a>
+                    </div>
+                  </>
                 ) : (
                   <div className="flex flex-col items-center justify-center h-full p-6 text-center space-y-3">
                     <BookOpen className="w-12 h-12 text-zinc-600" />

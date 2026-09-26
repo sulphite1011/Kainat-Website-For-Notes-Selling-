@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
-import { X, ZoomIn, ZoomOut, Check, RotateCcw, Move, Sparkles } from 'lucide-react';
+import { X, Check, RotateCcw, Move, Sparkles } from 'lucide-react';
 
 interface CircularLogoCropperProps {
   imageSrc: string;
@@ -14,97 +14,191 @@ export const CircularLogoCropper: React.FC<CircularLogoCropperProps> = ({
   onCancel,
   isLight = false,
 }) => {
+  // Crop window display size
+  const CROP_SIZE = 280;
+
+  // Natural image dimensions & base fit scale
+  const [naturalSize, setNaturalSize] = useState<{ width: number; height: number }>({ width: 0, height: 0 });
+  const [baseFitScale, setBaseFitScale] = useState<number>(1);
+
+  // Zoom relative to "fit entire image in circle" (1 = entire image fits inside circle without any cutoffs or black bars)
+  // Can zoom out to 0.5 (see whole picture with background) or zoom in up to 4.0
   const [zoom, setZoom] = useState<number>(1);
   const [panX, setPanX] = useState<number>(0);
   const [panY, setPanY] = useState<number>(0);
-  const [isDragging, setIsDragging] = useState<boolean>(false);
-  const [dragStart, setDragStart] = useState<{ x: number; y: number }>({ x: 0, y: 0 });
   const [previewDataUrl, setPreviewDataUrl] = useState<string>('');
 
-  const imgRef = useRef<HTMLImageElement | null>(null);
-  const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const containerRef = useRef<HTMLDivElement | null>(null);
 
-  const CROP_SIZE = 280; // Size of the crop frame in pixels
+  // Drag & Pinch Touch state refs
+  const dragRef = useRef<{
+    isDragging: boolean;
+    startX: number;
+    startY: number;
+    initialPanX: number;
+    initialPanY: number;
+    initialPinchDistance: number | null;
+    initialZoom: number;
+  }>({
+    isDragging: false,
+    startX: 0,
+    startY: 0,
+    initialPanX: 0,
+    initialPanY: 0,
+    initialPinchDistance: null,
+    initialZoom: 1,
+  });
 
-  // Generate cropped preview
+  // Load natural image dimensions and calculate initial fit
+  useEffect(() => {
+    const img = new Image();
+    img.crossOrigin = 'anonymous';
+    img.onload = () => {
+      const w = img.naturalWidth || 300;
+      const h = img.naturalHeight || 300;
+      setNaturalSize({ width: w, height: h });
+
+      // Calculate base scale so image fits centered in circle without cutting off or distortion
+      // Using Math.min ensures the ENTIRE image fits inside the circle on first open!
+      const fit = CROP_SIZE / Math.max(w, h);
+      setBaseFitScale(fit);
+      setZoom(1);
+      setPanX(0);
+      setPanY(0);
+    };
+    img.src = imageSrc;
+  }, [imageSrc]);
+
+  // Actual rendered pixel dimensions on screen
+  const renderedWidth = naturalSize.width * baseFitScale * zoom;
+  const renderedHeight = naturalSize.height * baseFitScale * zoom;
+
+  // Generate cropped circular output onto clean canvas
   const generateCrop = useCallback(() => {
-    if (!imgRef.current) return '';
-    const img = imgRef.current;
+    if (!naturalSize.width || !naturalSize.height) return '';
+
+    const OUTPUT_SIZE = 400; // Crisp export resolution
     const canvas = document.createElement('canvas');
-    const OUTPUT_SIZE = 400; // High-res output
     canvas.width = OUTPUT_SIZE;
     canvas.height = OUTPUT_SIZE;
     const ctx = canvas.getContext('2d');
     if (!ctx) return '';
 
-    // Clear
+    // Clear transparent background
     ctx.clearRect(0, 0, OUTPUT_SIZE, OUTPUT_SIZE);
 
-    // Create circular clip path
+    // Circular clip path
+    ctx.save();
     ctx.beginPath();
     ctx.arc(OUTPUT_SIZE / 2, OUTPUT_SIZE / 2, OUTPUT_SIZE / 2, 0, Math.PI * 2);
     ctx.closePath();
     ctx.clip();
 
-    // Calculate drawing dimensions
-    const scaleFactor = OUTPUT_SIZE / CROP_SIZE;
-    const baseWidth = img.naturalWidth || img.width;
-    const baseHeight = img.naturalHeight || img.height;
-    
-    // Fit aspect ratio
-    const baseScale = Math.max(CROP_SIZE / baseWidth, CROP_SIZE / baseHeight);
-    const drawWidth = baseWidth * baseScale * zoom * scaleFactor;
-    const drawHeight = baseHeight * baseScale * zoom * scaleFactor;
+    // Scale from CROP_SIZE (280) to OUTPUT_SIZE (400)
+    const factor = OUTPUT_SIZE / CROP_SIZE;
 
-    const centerX = OUTPUT_SIZE / 2 + panX * scaleFactor;
-    const centerY = OUTPUT_SIZE / 2 + panY * scaleFactor;
-
+    // Draw image centered according to panX, panY, and total scale
+    const drawWidth = renderedWidth * factor;
+    const drawHeight = renderedHeight * factor;
+    const centerX = OUTPUT_SIZE / 2 + panX * factor;
+    const centerY = OUTPUT_SIZE / 2 + panY * factor;
     const drawX = centerX - drawWidth / 2;
     const drawY = centerY - drawHeight / 2;
 
+    const img = new Image();
+    img.crossOrigin = 'anonymous';
+    img.src = imageSrc;
+
     ctx.drawImage(img, drawX, drawY, drawWidth, drawHeight);
+    ctx.restore();
 
     return canvas.toDataURL('image/png');
-  }, [zoom, panX, panY]);
+  }, [naturalSize, baseFitScale, zoom, panX, panY, renderedWidth, renderedHeight, imageSrc]);
 
-  // Update preview on adjustments
+  // Update live preview badge
   useEffect(() => {
+    if (!naturalSize.width) return;
     const timer = setTimeout(() => {
       const dataUrl = generateCrop();
       setPreviewDataUrl(dataUrl);
-    }, 50);
+    }, 40);
     return () => clearTimeout(timer);
-  }, [generateCrop]);
+  }, [generateCrop, naturalSize.width]);
 
-  // Mouse / Touch Drag handling
-  const handleMouseDown = (e: React.MouseEvent) => {
-    e.preventDefault();
-    setIsDragging(true);
-    setDragStart({ x: e.clientX - panX, y: e.clientY - panY });
-  };
-
-  const handleMouseMove = (e: React.MouseEvent) => {
-    if (!isDragging) return;
-    setPanX(e.clientX - dragStart.x);
-    setPanY(e.clientY - dragStart.y);
-  };
-
-  const handleMouseUp = () => {
-    setIsDragging(false);
-  };
-
+  // --- Touch Gestures (Drag Pan + 2-Finger Pinch to Zoom) ---
   const handleTouchStart = (e: React.TouchEvent) => {
     if (e.touches.length === 1) {
-      setIsDragging(true);
-      setDragStart({ x: e.touches[0].clientX - panX, y: e.touches[0].clientY - panY });
+      dragRef.current.isDragging = true;
+      dragRef.current.startX = e.touches[0].clientX;
+      dragRef.current.startY = e.touches[0].clientY;
+      dragRef.current.initialPanX = panX;
+      dragRef.current.initialPanY = panY;
+      dragRef.current.initialPinchDistance = null;
+    } else if (e.touches.length === 2) {
+      // Pinch to zoom initialization
+      dragRef.current.isDragging = false;
+      const dx = e.touches[0].clientX - e.touches[1].clientX;
+      const dy = e.touches[0].clientY - e.touches[1].clientY;
+      dragRef.current.initialPinchDistance = Math.hypot(dx, dy);
+      dragRef.current.initialZoom = zoom;
     }
   };
 
   const handleTouchMove = (e: React.TouchEvent) => {
-    if (!isDragging || e.touches.length !== 1) return;
-    setPanX(e.touches[0].clientX - dragStart.x);
-    setPanY(e.touches[0].clientY - dragStart.y);
+    if (e.touches.length === 1 && dragRef.current.isDragging) {
+      const dx = e.touches[0].clientX - dragRef.current.startX;
+      const dy = e.touches[0].clientY - dragRef.current.startY;
+      setPanX(dragRef.current.initialPanX + dx);
+      setPanY(dragRef.current.initialPanY + dy);
+    } else if (e.touches.length === 2 && dragRef.current.initialPinchDistance !== null) {
+      // 2-finger pinch
+      const dx = e.touches[0].clientX - e.touches[1].clientX;
+      const dy = e.touches[0].clientY - e.touches[1].clientY;
+      const currentDistance = Math.hypot(dx, dy);
+      const ratio = currentDistance / dragRef.current.initialPinchDistance;
+      const newZoom = Math.min(4.0, Math.max(0.4, dragRef.current.initialZoom * ratio));
+      setZoom(newZoom);
+    }
+  };
+
+  const handleTouchEnd = () => {
+    dragRef.current.isDragging = false;
+    dragRef.current.initialPinchDistance = null;
+  };
+
+  // --- Mouse Gestures (Drag Pan + Scroll Wheel to Zoom) ---
+  const handleMouseDown = (e: React.MouseEvent) => {
+    e.preventDefault();
+    dragRef.current.isDragging = true;
+    dragRef.current.startX = e.clientX;
+    dragRef.current.startY = e.clientY;
+    dragRef.current.initialPanX = panX;
+    dragRef.current.initialPanY = panY;
+  };
+
+  const handleMouseMove = (e: React.MouseEvent) => {
+    if (!dragRef.current.isDragging) return;
+    const dx = e.clientX - dragRef.current.startX;
+    const dy = e.clientY - dragRef.current.startY;
+    setPanX(dragRef.current.initialPanX + dx);
+    setPanY(dragRef.current.initialPanY + dy);
+  };
+
+  const handleMouseUp = () => {
+    dragRef.current.isDragging = false;
+  };
+
+  // Scroll wheel on picture zooms in/out smoothly
+  const handleWheel = (e: React.WheelEvent) => {
+    e.preventDefault();
+    const zoomDelta = e.deltaY < 0 ? 0.08 : -0.08;
+    setZoom((prev) => Math.min(4.0, Math.max(0.4, prev + zoomDelta)));
+  };
+
+  const handleReset = () => {
+    setZoom(1);
+    setPanX(0);
+    setPanY(0);
   };
 
   const handleApplyCrop = () => {
@@ -114,33 +208,27 @@ export const CircularLogoCropper: React.FC<CircularLogoCropperProps> = ({
     }
   };
 
-  const handleReset = () => {
-    setZoom(1);
-    setPanX(0);
-    setPanY(0);
-  };
-
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md animate-in fade-in duration-200">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/80 backdrop-blur-md animate-in fade-in duration-200">
       <div
-        className={`w-full max-w-xl rounded-2xl border shadow-2xl overflow-hidden flex flex-col ${
+        className={`w-full max-w-lg rounded-2xl border shadow-2xl overflow-hidden flex flex-col ${
           isLight ? 'bg-white border-slate-200 text-slate-800' : 'bg-zinc-900 border-zinc-800 text-zinc-100'
         }`}
       >
         {/* Header */}
         <div
-          className={`flex items-center justify-between px-6 py-4 border-b ${
+          className={`flex items-center justify-between px-5 py-3.5 border-b ${
             isLight ? 'border-slate-200 bg-slate-50' : 'border-zinc-800 bg-zinc-950/70'
           }`}
         >
           <div className="flex items-center gap-2">
-            <div className="w-8 h-8 rounded-full bg-emerald-500/10 border border-emerald-500/30 flex items-center justify-center text-emerald-400">
-              <Sparkles className="w-4 h-4" />
+            <div className="w-7 h-7 rounded-full bg-emerald-500/10 border border-emerald-500/30 flex items-center justify-center text-emerald-400">
+              <Sparkles className="w-3.5 h-3.5" />
             </div>
             <div>
-              <h3 className="text-sm font-bold text-white">Instagram-Style Circular Logo Cropper</h3>
+              <h3 className="text-sm font-bold text-white">Adjust Your Profile Picture</h3>
               <p className="text-[11px] text-zinc-400">
-                Adjust zoom and drag to position. The glowing circle is exactly what will appear on your website.
+                Pinch or scroll to zoom · Drag with finger to center inside circle
               </p>
             </div>
           </div>
@@ -153,8 +241,8 @@ export const CircularLogoCropper: React.FC<CircularLogoCropperProps> = ({
         </div>
 
         {/* Main Crop Work Area */}
-        <div className="p-6 flex flex-col items-center space-y-6">
-          {/* Interactive Crop Frame with Instagram-Style Circular Mask */}
+        <div className="p-5 flex flex-col items-center space-y-4">
+          {/* Interactive Crop Frame with Instagram-Style Circular Guide */}
           <div
             ref={containerRef}
             onMouseDown={handleMouseDown}
@@ -163,137 +251,113 @@ export const CircularLogoCropper: React.FC<CircularLogoCropperProps> = ({
             onMouseLeave={handleMouseUp}
             onTouchStart={handleTouchStart}
             onTouchMove={handleTouchMove}
-            onTouchEnd={handleMouseUp}
-            className="relative overflow-hidden rounded-xl border border-zinc-700 bg-zinc-950 shadow-inner select-none cursor-move flex items-center justify-center"
+            onTouchEnd={handleTouchEnd}
+            onWheel={handleWheel}
+            className="relative overflow-hidden rounded-2xl border-2 border-emerald-500/40 bg-zinc-950 shadow-inner select-none cursor-grab active:cursor-grabbing flex items-center justify-center touch-none"
             style={{ width: `${CROP_SIZE}px`, height: `${CROP_SIZE}px` }}
           >
-            {/* The Image being transformed */}
-            <img
-              ref={imgRef}
-              src={imageSrc}
-              alt="Crop target"
-              draggable={false}
-              className="absolute max-w-none transition-transform pointer-events-none"
-              style={{
-                transform: `translate(${panX}px, ${panY}px) scale(${zoom})`,
-                transformOrigin: 'center center',
-              }}
-            />
-
-            {/* Circular Cutout Mask (Darkens the corners, leaves circle clear) */}
-            <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
-              {/* Overlay with 50% opacity outside circle using box-shadow */}
-              <div
-                className="w-full h-full rounded-full border-2 border-emerald-400 border-dashed"
+            {/* The Image - perfectly centered and scaled by user touch */}
+            {naturalSize.width > 0 && (
+              <img
+                src={imageSrc}
+                alt="Logo crop"
+                draggable={false}
+                className="absolute pointer-events-none select-none max-w-none"
                 style={{
-                  boxShadow: '0 0 0 9999px rgba(9, 9, 11, 0.78)',
+                  width: `${renderedWidth}px`,
+                  height: `${renderedHeight}px`,
+                  left: `${CROP_SIZE / 2 - renderedWidth / 2 + panX}px`,
+                  top: `${CROP_SIZE / 2 - renderedHeight / 2 + panY}px`,
+                }}
+              />
+            )}
+
+            {/* Circular Mask Overlay (Darkens outside the circle, leaving the circular logo highlighted) */}
+            <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
+              <div
+                className="rounded-full border-2 border-emerald-400 shadow-sm"
+                style={{
+                  width: `${CROP_SIZE}px`,
+                  height: `${CROP_SIZE}px`,
+                  boxShadow: '0 0 0 9999px rgba(0, 0, 0, 0.72)',
                 }}
               />
             </div>
 
+            {/* Crosshair guide lines */}
+            <div className="pointer-events-none absolute inset-0 flex items-center justify-center opacity-30">
+              <div className="w-full h-px border-t border-dashed border-white/60" />
+              <div className="h-full w-px border-l border-dashed border-white/60 absolute" />
+            </div>
+
             {/* Hint overlay */}
-            <div className="pointer-events-none absolute bottom-2 bg-black/60 backdrop-blur-sm text-emerald-300 text-[10px] font-semibold px-2 py-0.5 rounded-full border border-emerald-500/30 flex items-center gap-1">
+            <div className="pointer-events-none absolute bottom-2.5 bg-black/70 backdrop-blur-sm text-emerald-300 text-[10px] font-semibold px-2.5 py-0.5 rounded-full border border-emerald-500/30 flex items-center gap-1.5 shadow">
               <Move className="w-2.5 h-2.5" />
-              <span>Drag to Pan</span>
+              <span>Use finger to drag & zoom on picture</span>
             </div>
           </div>
 
-          {/* Controls Bar */}
-          <div className="w-full max-w-md space-y-4">
-            {/* Zoom Slider */}
-            <div className="space-y-1.5">
-              <div className="flex items-center justify-between text-xs text-zinc-300 font-medium">
-                <span className="flex items-center gap-1.5">
-                  <ZoomIn className="w-3.5 h-3.5 text-emerald-400" />
-                  <span>Zoom / Scale: {Math.round(zoom * 100)}%</span>
-                </span>
-                <button
-                  type="button"
-                  onClick={handleReset}
-                  className="text-[11px] text-zinc-400 hover:text-emerald-400 flex items-center gap-1 transition-colors"
-                >
-                  <RotateCcw className="w-3 h-3" />
-                  <span>Reset</span>
-                </button>
-              </div>
-              <div className="flex items-center gap-3">
-                <ZoomOut className="w-4 h-4 text-zinc-500" />
-                <input
-                  type="range"
-                  min="0.5"
-                  max="3.0"
-                  step="0.05"
-                  value={zoom}
-                  onChange={(e) => setZoom(parseFloat(e.target.value))}
-                  className="w-full accent-emerald-500 h-1.5 bg-zinc-800 rounded-lg cursor-pointer"
-                />
-                <ZoomIn className="w-4 h-4 text-emerald-400" />
-              </div>
+          {/* Quick Controls: Zoom buttons & Reset */}
+          <div className="w-full max-w-sm flex items-center justify-between px-2">
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => setZoom((z) => Math.max(0.4, Number((z - 0.15).toFixed(2))))}
+                className="px-2.5 py-1 rounded-md bg-zinc-800 hover:bg-zinc-700 text-xs font-semibold text-zinc-300 transition-colors"
+                title="Zoom Out"
+              >
+                − Zoom Out
+              </button>
+              <span className="text-xs font-mono font-bold text-emerald-400 w-12 text-center">
+                {Math.round(zoom * 100)}%
+              </span>
+              <button
+                type="button"
+                onClick={() => setZoom((z) => Math.min(4.0, Number((z + 0.15).toFixed(2))))}
+                className="px-2.5 py-1 rounded-md bg-zinc-800 hover:bg-zinc-700 text-xs font-semibold text-zinc-300 transition-colors"
+                title="Zoom In"
+              >
+                + Zoom In
+              </button>
             </div>
 
-            {/* Fine Tuning Horizontal & Vertical Sliders */}
-            <div className="grid grid-cols-2 gap-4 pt-1">
-              <div className="space-y-1">
-                <div className="flex justify-between text-[11px] text-zinc-400 font-mono">
-                  <span>Pan X:</span>
-                  <span>{panX}px</span>
-                </div>
-                <input
-                  type="range"
-                  min="-150"
-                  max="150"
-                  step="1"
-                  value={panX}
-                  onChange={(e) => setPanX(parseInt(e.target.value, 10))}
-                  className="w-full accent-teal-500 h-1 bg-zinc-800 rounded cursor-pointer"
-                />
-              </div>
+            <button
+              type="button"
+              onClick={handleReset}
+              className="text-[11px] text-zinc-400 hover:text-emerald-400 flex items-center gap-1 transition-colors px-2 py-1 rounded hover:bg-zinc-800"
+            >
+              <RotateCcw className="w-3 h-3" />
+              <span>Reset Fit</span>
+            </button>
+          </div>
 
-              <div className="space-y-1">
-                <div className="flex justify-between text-[11px] text-zinc-400 font-mono">
-                  <span>Pan Y:</span>
-                  <span>{panY}px</span>
-                </div>
-                <input
-                  type="range"
-                  min="-150"
-                  max="150"
-                  step="1"
-                  value={panY}
-                  onChange={(e) => setPanY(parseInt(e.target.value, 10))}
-                  className="w-full accent-teal-500 h-1 bg-zinc-800 rounded cursor-pointer"
-                />
-              </div>
+          {/* Live Website Header Preview */}
+          <div className="w-full max-w-sm p-3 rounded-xl border border-zinc-800 bg-zinc-950/80 flex items-center justify-between gap-3">
+            <div className="space-y-0.5 min-w-0">
+              <span className="text-[10px] uppercase font-bold text-emerald-400 tracking-wider block">
+                Live Result:
+              </span>
+              <p className="text-xs text-zinc-400 truncate">
+                Preview of store logo & header badge
+              </p>
             </div>
 
-            {/* Live Website Header Preview */}
-            <div className="p-3.5 rounded-xl border border-zinc-800 bg-zinc-950/80 flex items-center justify-between gap-4">
-              <div className="space-y-0.5">
-                <span className="text-[10px] uppercase font-bold text-zinc-500 tracking-wider">
-                  Live Instagram-Style Preview:
-                </span>
-                <p className="text-xs text-zinc-400">
-                  How it appears in your website header & admin portal
-                </p>
-              </div>
-
-              <div className="flex items-center gap-3 bg-zinc-900 px-3 py-1.5 rounded-lg border border-zinc-800">
-                {previewDataUrl ? (
-                  <div className="relative">
-                    <img
-                      src={previewDataUrl}
-                      alt="Circular preview"
-                      className="w-10 h-10 rounded-full aspect-square object-cover ring-2 ring-emerald-500 ring-offset-2 ring-offset-zinc-950 shadow-md"
-                    />
-                    <div className="absolute -bottom-0.5 -right-0.5 w-3 h-3 bg-emerald-500 rounded-full border-2 border-zinc-950" />
-                  </div>
-                ) : (
-                  <div className="w-10 h-10 rounded-full bg-zinc-800 animate-pulse" />
-                )}
-                <div>
-                  <div className="text-xs font-bold text-white leading-tight">Kainat Notes</div>
-                  <div className="text-[10px] text-emerald-400 font-mono font-semibold">Official Store</div>
+            <div className="flex items-center gap-2.5 bg-zinc-900 px-3 py-1.5 rounded-lg border border-zinc-800 shrink-0">
+              {previewDataUrl ? (
+                <div className="relative">
+                  <img
+                    src={previewDataUrl}
+                    alt="Circular preview"
+                    className="w-10 h-10 rounded-full aspect-square object-cover ring-2 ring-emerald-500 shadow-md"
+                  />
+                  <div className="absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 bg-emerald-500 rounded-full border-2 border-zinc-950" />
                 </div>
+              ) : (
+                <div className="w-10 h-10 rounded-full bg-zinc-800 animate-pulse" />
+              )}
+              <div className="text-left">
+                <div className="text-xs font-bold text-white leading-tight">Kainat Notes</div>
+                <div className="text-[10px] text-emerald-400 font-mono font-semibold">Official Hub</div>
               </div>
             </div>
           </div>
@@ -301,14 +365,14 @@ export const CircularLogoCropper: React.FC<CircularLogoCropperProps> = ({
 
         {/* Footer Actions */}
         <div
-          className={`flex items-center justify-end gap-3 px-6 py-4 border-t ${
+          className={`flex items-center justify-end gap-2.5 px-5 py-3.5 border-t ${
             isLight ? 'border-slate-200 bg-slate-50' : 'border-zinc-800 bg-zinc-950/80'
           }`}
         >
           <button
             type="button"
             onClick={onCancel}
-            className="px-4 py-2 text-xs font-semibold rounded-lg border border-zinc-700 hover:bg-zinc-800 text-zinc-300 transition-colors"
+            className="px-3.5 py-2 text-xs font-semibold rounded-lg border border-zinc-700 hover:bg-zinc-800 text-zinc-300 transition-colors"
           >
             Cancel
           </button>
@@ -316,7 +380,7 @@ export const CircularLogoCropper: React.FC<CircularLogoCropperProps> = ({
           <button
             type="button"
             onClick={handleApplyCrop}
-            className="px-5 py-2 text-xs font-bold rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white flex items-center gap-2 shadow-lg shadow-emerald-950/50 transition-colors"
+            className="px-5 py-2 text-xs font-bold rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white flex items-center gap-1.5 shadow-md shadow-emerald-950/50 transition-colors active:scale-95"
           >
             <Check className="w-4 h-4" />
             <span>Save & Apply Circular Logo</span>

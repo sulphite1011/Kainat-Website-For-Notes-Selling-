@@ -4,26 +4,31 @@
 
 export function extractGoogleDriveFileId(url: string): string | null {
   if (!url) return null;
-  
+  const trimmed = url.trim();
+
   // Format 1: /file/d/ID/...
-  const fileMatch = url.match(/\/file\/d\/([a-zA-Z0-9_-]+)/);
+  const fileMatch = trimmed.match(/\/file\/d\/([a-zA-Z0-9_-]+)/);
   if (fileMatch && fileMatch[1]) return fileMatch[1];
 
-  // Format 2: open?id=ID or uc?id=ID
-  const idMatch = url.match(/[?&]id=([a-zA-Z0-9_-]+)/);
+  // Format 2: open?id=ID or uc?id=ID or id=ID
+  const idMatch = trimmed.match(/[?&]id=([a-zA-Z0-9_-]+)/);
   if (idMatch && idMatch[1]) return idMatch[1];
 
   // Format 3: /document/d/ID
-  const docMatch = url.match(/\/document\/d\/([a-zA-Z0-9_-]+)/);
+  const docMatch = trimmed.match(/\/document\/d\/([a-zA-Z0-9_-]+)/);
   if (docMatch && docMatch[1]) return docMatch[1];
 
   // Format 4: /presentation/d/ID
-  const presMatch = url.match(/\/presentation\/d\/([a-zA-Z0-9_-]+)/);
+  const presMatch = trimmed.match(/\/presentation\/d\/([a-zA-Z0-9_-]+)/);
   if (presMatch && presMatch[1]) return presMatch[1];
 
   // Format 5: /spreadsheets/d/ID
-  const sheetMatch = url.match(/\/spreadsheets\/d\/([a-zA-Z0-9_-]+)/);
+  const sheetMatch = trimmed.match(/\/spreadsheets\/d\/([a-zA-Z0-9_-]+)/);
   if (sheetMatch && sheetMatch[1]) return sheetMatch[1];
+
+  // Format 6: /folders/ID
+  const folderMatch = trimmed.match(/\/folders\/([a-zA-Z0-9_-]+)/);
+  if (folderMatch && folderMatch[1]) return folderMatch[1];
 
   return null;
 }
@@ -31,11 +36,6 @@ export function extractGoogleDriveFileId(url: string): string | null {
 export function formatGoogleDrivePreviewUrl(url: string): string {
   if (!url) return '';
   const trimmed = url.trim();
-
-  // If already preview
-  if (trimmed.includes('drive.google.com') && trimmed.endsWith('/preview')) {
-    return trimmed;
-  }
 
   const fileId = extractGoogleDriveFileId(trimmed);
   if (fileId) {
@@ -51,9 +51,19 @@ export function formatGoogleDrivePreviewUrl(url: string): string {
     return `https://drive.google.com/file/d/${fileId}/preview`;
   }
 
-  // If it's a PDF web link
+  // If already a preview URL
+  if (trimmed.includes('drive.google.com') && trimmed.endsWith('/preview')) {
+    return trimmed;
+  }
+
+  // Standard web PDF file link
   if (trimmed.toLowerCase().endsWith('.pdf') || trimmed.toLowerCase().includes('.pdf?')) {
     return `https://docs.google.com/viewer?url=${encodeURIComponent(trimmed)}&embedded=true`;
+  }
+
+  // Cloudflare R2 / S3 / Direct web URL
+  if (trimmed.startsWith('http://') || trimmed.startsWith('https://')) {
+    return trimmed;
   }
 
   return trimmed;
@@ -62,7 +72,7 @@ export function formatGoogleDrivePreviewUrl(url: string): string {
 export function getDirectDriveViewUrl(url: string): string {
   if (!url) return '';
   const fileId = extractGoogleDriveFileId(url);
-  if (fileId && url.includes('drive.google.com')) {
+  if (fileId) {
     return `https://drive.google.com/file/d/${fileId}/view?usp=sharing`;
   }
   return url;
@@ -70,11 +80,13 @@ export function getDirectDriveViewUrl(url: string): string {
 
 export function isDriveOrPdfUrl(url?: string): boolean {
   if (!url) return false;
-  const lower = url.toLowerCase();
+  const lower = url.toLowerCase().trim();
   return (
     lower.includes('drive.google.com') ||
     lower.includes('docs.google.com') ||
-    lower.endsWith('.pdf') ||
-    Boolean(extractGoogleDriveFileId(url))
+    lower.includes('.pdf') ||
+    Boolean(extractGoogleDriveFileId(url)) ||
+    lower.startsWith('http://') ||
+    lower.startsWith('https://')
   );
 }

@@ -505,7 +505,7 @@ app.post('/api/admin/notes', (req: Request, res: Response) => {
     chapterNumber: Number(chapterNumber) || 1,
     chapterTitle: chapterTitle.trim(),
     description: description ? description.trim() : `Complete chapter source notes for ${classLevel} ${subject}.`,
-    totalPages: Number(totalPages) || generatedPages.length || 20,
+    totalPages: rawTextContent && rawTextContent.trim() ? generatedPages.length : (Number(totalPages) || generatedPages.length || 20),
     pricePKR: Number(pricePKR) || 199,
     rating: 5.0,
     reviewsCount: 1,

@@ -18,7 +18,7 @@ export const seedNotes: NoteItem[] = [
       "Entropy",
       "Laws of Thermodynamics"
     ],
-    "googleDriveUrl": "https://drive.google.com/file/d/demo/preview",
+    "googleDriveUrl": "https://drive.google.com/file/d/1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs/preview",
     "coverImage": "",
     "previewPages": [
       {

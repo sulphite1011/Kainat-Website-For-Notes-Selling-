@@ -11,7 +11,7 @@ import {
   ExternalLink,
   BookOpen,
 } from 'lucide-react';
-import { formatGoogleDrivePreviewUrl, isDriveOrPdfUrl } from '../utils/driveUrlHelper';
+import { formatGoogleDrivePreviewUrl, isDriveOrPdfUrl, getDirectDriveViewUrl } from '../utils/driveUrlHelper';
 
 interface NotePreviewModalProps {
   note: NoteItem | null;
@@ -31,10 +31,27 @@ export const NotePreviewModal: React.FC<NotePreviewModalProps> = ({
 
   if (!note) return null;
 
-  const previewPages = note.previewPages || [];
+  // Use fullContentPages length if available, otherwise totalPages or previewPages
+  const totalAvailablePages = Math.max(
+    note.totalPages || 0,
+    note.fullContentPages?.length || 0,
+    note.previewPages?.length || 0,
+    1
+  );
+
+  const previewPages = (note.previewPages && note.previewPages.length > 0)
+    ? note.previewPages
+    : (note.fullContentPages && note.fullContentPages.length > 0)
+    ? note.fullContentPages
+    : [];
+
   const currentPage = previewPages[activePageIndex];
   const hasDrivePdf = isDriveOrPdfUrl(note.googleDriveUrl);
   const driveEmbedUrl = formatGoogleDrivePreviewUrl(note.googleDriveUrl);
+  const directDriveUrl = getDirectDriveViewUrl(note.googleDriveUrl);
+
+  // Exact remaining locked count
+  const remainingLockedCount = Math.max(0, totalAvailablePages - previewPages.length);
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/80 backdrop-blur-md animate-in fade-in duration-200">
@@ -44,7 +61,9 @@ export const NotePreviewModal: React.FC<NotePreviewModalProps> = ({
           <div className="min-w-0 pr-3">
             <div className="text-xs text-emerald-400 font-semibold tracking-wide flex items-center gap-1.5">
               <ShieldCheck className="w-3.5 h-3.5 shrink-0" />
-              <span>Free Student Sample ({previewPages.length} of {note.totalPages} Pages Previewable)</span>
+              <span>
+                Free Student Sample ({previewPages.length} of {totalAvailablePages} Pages Previewable)
+              </span>
             </div>
             <h2 className="text-sm sm:text-base font-bold text-white truncate mt-0.5">{note.title}</h2>
           </div>
@@ -62,7 +81,7 @@ export const NotePreviewModal: React.FC<NotePreviewModalProps> = ({
                 }`}
               >
                 <FileText className="w-3 h-3" />
-                <span>Sample Notes</span>
+                <span>Sample Notes ({previewPages.length})</span>
               </button>
 
               <button
@@ -106,29 +125,33 @@ export const NotePreviewModal: React.FC<NotePreviewModalProps> = ({
                   {/* Page Header */}
                   <div className="border-b border-zinc-800 pb-3 flex items-center justify-between">
                     <div>
-                      <span className="text-xs text-emerald-400 font-mono">Page {currentPage.pageNumber}</span>
+                      <span className="text-xs text-emerald-400 font-mono">
+                        Page {currentPage.pageNumber || activePageIndex + 1} of {previewPages.length}
+                      </span>
                       <h3 className="text-base sm:text-lg font-bold text-white mt-0.5">{currentPage.title}</h3>
                       <div className="text-xs text-zinc-400 mt-0.5">{currentPage.section}</div>
                     </div>
                     <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-emerald-950 text-emerald-400 border border-emerald-800">
-                      Sample
+                      Sample Page
                     </span>
                   </div>
 
                   {/* Core Notes Key Takeaways */}
-                  <div className="space-y-2">
-                    <div className="text-xs font-semibold text-emerald-300 uppercase tracking-wide">
-                      Key Highlights & Definitions:
+                  {currentPage.keyPoints && currentPage.keyPoints.length > 0 && (
+                    <div className="space-y-2">
+                      <div className="text-xs font-semibold text-emerald-300 uppercase tracking-wide">
+                        Key Highlights & Definitions:
+                      </div>
+                      <ul className="space-y-1.5 text-xs text-zinc-200">
+                        {currentPage.keyPoints.map((pt, idx) => (
+                          <li key={idx} className="flex items-start gap-2">
+                            <span className="text-emerald-400 font-bold shrink-0">•</span>
+                            <span>{pt}</span>
+                          </li>
+                        ))}
+                      </ul>
                     </div>
-                    <ul className="space-y-1.5 text-xs text-zinc-200">
-                      {currentPage.keyPoints?.map((pt, idx) => (
-                        <li key={idx} className="flex items-start gap-2">
-                          <span className="text-emerald-400 font-bold shrink-0">•</span>
-                          <span>{pt}</span>
-                        </li>
-                      ))}
-                    </ul>
-                  </div>
+                  )}
 
                   {/* Formulas if present */}
                   {currentPage.formulas && currentPage.formulas.length > 0 && (
@@ -171,16 +194,28 @@ export const NotePreviewModal: React.FC<NotePreviewModalProps> = ({
                     />
                   )}
 
-                  {/* Teaser for remaining pages */}
-                  <div className="mt-6 p-4 rounded-xl border border-dashed border-zinc-800 bg-zinc-950/80 text-center space-y-2">
-                    <Lock className="w-5 h-5 text-emerald-400 mx-auto" />
-                    <div className="text-xs font-semibold text-zinc-200">
-                      {Math.max(1, note.totalPages - previewPages.length)} More Comprehensive Pages Locked
+                  {/* Teaser for remaining pages - Counts ACCORDINGLY */}
+                  {remainingLockedCount > 0 ? (
+                    <div className="mt-6 p-4 rounded-xl border border-dashed border-zinc-800 bg-zinc-950/80 text-center space-y-2">
+                      <Lock className="w-5 h-5 text-emerald-400 mx-auto" />
+                      <div className="text-xs font-semibold text-zinc-200">
+                        {remainingLockedCount} More Comprehensive Pages in Full Course
+                      </div>
+                      <p className="text-[11px] text-zinc-400">
+                        Unlock complete derivations, numericals, and full Google Drive source files with EasyPaisa checkout.
+                      </p>
                     </div>
-                    <p className="text-[11px] text-zinc-400">
-                      Unlock complete derivations, numericals, and full Google Drive source files with EasyPaisa checkout.
-                    </p>
-                  </div>
+                  ) : (
+                    <div className="mt-6 p-3.5 rounded-xl border border-emerald-800/40 bg-emerald-950/20 text-center space-y-1">
+                      <ShieldCheck className="w-5 h-5 text-emerald-400 mx-auto" />
+                      <div className="text-xs font-semibold text-emerald-300">
+                        All {totalAvailablePages} Pages Available Upon Verification
+                      </div>
+                      <p className="text-[11px] text-zinc-400">
+                        Instant unlock inside the interactive reader once verified with EasyPaisa.
+                      </p>
+                    </div>
+                  )}
                 </div>
               ) : (
                 <div className="text-center py-12 text-zinc-400 space-y-2">
@@ -198,37 +233,53 @@ export const NotePreviewModal: React.FC<NotePreviewModalProps> = ({
             </div>
           )}
 
-          {/* TAB 2: Google Drive PDF Preview */}
+          {/* TAB 2: Google Drive PDF Preview with fallback options */}
           {activeTab === 'pdf' && (
             <div className="relative flex-1 w-full h-full flex flex-col bg-zinc-950">
-              {/* Notification bar */}
-              <div className="px-4 py-2 bg-zinc-900/90 border-b border-zinc-800 text-[11px] flex items-center justify-between text-zinc-400">
-                <span className="flex items-center gap-1.5">
-                  <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" />
-                  <span>Google Drive / PDF Reader Sample View</span>
+              {/* Notification & direct launch bar */}
+              <div className="px-4 py-2.5 bg-zinc-900/90 border-b border-zinc-800 text-xs flex flex-wrap items-center justify-between gap-2 text-zinc-300">
+                <span className="flex items-center gap-1.5 font-medium">
+                  <ShieldCheck className="w-4 h-4 text-emerald-400" />
+                  <span>Google Drive Document Preview</span>
                 </span>
-                {hasDrivePdf && (
-                  <a
-                    href={note.googleDriveUrl}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="text-emerald-400 hover:text-emerald-300 flex items-center gap-1 font-semibold"
-                  >
-                    <span>Open in Drive</span>
-                    <ExternalLink className="w-3 h-3" />
-                  </a>
-                )}
+
+                <div className="flex items-center gap-2">
+                  {hasDrivePdf && (
+                    <a
+                      href={directDriveUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="px-3 py-1 bg-emerald-600 hover:bg-emerald-500 text-white rounded-md text-xs font-bold flex items-center gap-1.5 shadow transition-colors"
+                    >
+                      <span>Open in New Tab</span>
+                      <ExternalLink className="w-3.5 h-3.5" />
+                    </a>
+                  )}
+                </div>
               </div>
 
               {hasDrivePdf && driveEmbedUrl ? (
-                <div className="relative flex-1 w-full h-full">
+                <div className="relative flex-1 w-full h-full flex flex-col">
                   <iframe
                     src={driveEmbedUrl}
                     title={note.title}
-                    className="w-full h-full border-0"
+                    className="w-full flex-1 border-0 bg-zinc-900"
                     allow="autoplay"
                     sandbox="allow-scripts allow-same-origin allow-popups"
                   />
+                  {/* Troubleshooting bar for restricted browsers */}
+                  <div className="px-4 py-2 bg-zinc-950 border-t border-zinc-800 text-[11px] text-zinc-400 flex items-center justify-between">
+                    <span>If the PDF shows a blank box or cookie block from Google:</span>
+                    <a
+                      href={directDriveUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-emerald-400 font-semibold hover:underline flex items-center gap-1"
+                    >
+                      <span>Launch direct document viewer</span>
+                      <ExternalLink className="w-3 h-3" />
+                    </a>
+                  </div>
                 </div>
               ) : (
                 <div className="flex-1 flex flex-col items-center justify-center p-6 text-center space-y-3">
@@ -236,9 +287,9 @@ export const NotePreviewModal: React.FC<NotePreviewModalProps> = ({
                     <BookOpen className="w-6 h-6" />
                   </div>
                   <div className="space-y-1">
-                    <h3 className="text-sm font-bold text-white">Google Drive PDF Preview Ready</h3>
+                    <h3 className="text-sm font-bold text-white">Google Drive Document Ready</h3>
                     <p className="text-xs text-zinc-400 max-w-md">
-                      This note is delivered digitally via secure reader and Google Drive. When Kainat uploads a Google Drive file link, the live document embeds here.
+                      This note is delivered digitally. Switch to the <strong>"Sample Notes"</strong> tab above to read the curriculum notes, or add your Google Drive link in Admin to stream directly.
                     </p>
                   </div>
                 </div>
@@ -260,7 +311,7 @@ export const NotePreviewModal: React.FC<NotePreviewModalProps> = ({
                 <ChevronLeft className="w-4 h-4" />
               </button>
               <span className="text-xs text-zinc-400 font-mono">
-                Page {activePageIndex + 1} of {previewPages.length}
+                Sample Page {activePageIndex + 1} of {previewPages.length}
               </span>
               <button
                 onClick={() => setActivePageIndex((prev) => Math.min(previewPages.length - 1, prev + 1))}
@@ -272,7 +323,7 @@ export const NotePreviewModal: React.FC<NotePreviewModalProps> = ({
             </div>
           ) : (
             <div className="text-xs text-zinc-400">
-              Full {note.totalPages}-page curriculum verified by Kainat
+              Total {totalAvailablePages} Pages · Curated by Kainat
             </div>
           )}
 

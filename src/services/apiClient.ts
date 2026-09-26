@@ -316,7 +316,9 @@ export async function apiSaveNote(noteData: Partial<NoteItem>, editNoteId?: stri
       chapterNumber: Number(noteData.chapterNumber) || 1,
       chapterTitle: noteData.chapterTitle || '',
       description: noteData.description || '',
-      totalPages: Number(noteData.totalPages) || generatedPages.length || 20,
+      totalPages: (noteData as any).rawTextContent && (noteData as any).rawTextContent.trim()
+        ? generatedPages.length
+        : (Number(noteData.totalPages) || generatedPages.length || 20),
       pricePKR: Number(noteData.pricePKR) || 199,
       topicsCovered: topics,
       googleDriveUrl: noteData.googleDriveUrl || '',

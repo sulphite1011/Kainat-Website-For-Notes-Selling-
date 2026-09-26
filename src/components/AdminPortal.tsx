@@ -32,6 +32,7 @@ import {
 } from 'lucide-react';
 import { KainatLogo } from './KainatLogo';
 import { CircularLogoCropper } from './CircularLogoCropper';
+import { countEstimatedPagesFromRawContent } from '../utils/notesFormatter';
 import { sound } from '../utils/soundEffects';
 import {
   apiAdminLogin,
@@ -1519,7 +1520,15 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
                     <textarea
                       rows={5}
                       value={noteForm.rawTextContent}
-                      onChange={(e) => setNoteForm({ ...noteForm, rawTextContent: e.target.value })}
+                      onChange={(e) => {
+                        const text = e.target.value;
+                        const pageCount = countEstimatedPagesFromRawContent(text);
+                        setNoteForm({
+                          ...noteForm,
+                          rawTextContent: text,
+                          totalPages: text.trim() ? pageCount : noteForm.totalPages,
+                        });
+                      }}
                       placeholder="Paste your curriculum, syllabus, or lecture notes text here! Example:
 I. Microscopy
 • Principle of Simple & Compound Microscopes
@@ -1537,11 +1546,18 @@ II. Fixation & Tissue Processing
                           : 'bg-zinc-900 border border-emerald-900/60 text-zinc-100 placeholder:text-zinc-500'
                       }`}
                     />
-                    <div className="text-[11px] text-emerald-600 dark:text-emerald-400 flex items-center gap-1.5 font-medium">
-                      <span>✓</span>
-                      <span>
-                        Students will be able to read these beautiful formatted digital notes inside the Secure Document Viewer as well as see previews!
+                    <div className="text-[11px] text-emerald-600 dark:text-emerald-400 flex items-center justify-between font-medium">
+                      <span className="flex items-center gap-1.5">
+                        <span>✓</span>
+                        <span>
+                          Formatted digital notes will appear inside the Secure Document Viewer & sample preview!
+                        </span>
                       </span>
+                      {noteForm.rawTextContent.trim() && (
+                        <span className="font-mono text-emerald-500 font-bold bg-emerald-950/60 px-2 py-0.5 rounded border border-emerald-800">
+                          {countEstimatedPagesFromRawContent(noteForm.rawTextContent)} Pages Detected
+                        </span>
+                      )}
                     </div>
                   </div>
 

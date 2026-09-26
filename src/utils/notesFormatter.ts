@@ -132,3 +132,18 @@ export function generatePagesFromRawContent(
     };
   });
 }
+
+/**
+ * Counts the exact number of pages that will be created from pasted raw text.
+ */
+export function countEstimatedPagesFromRawContent(rawText: string): number {
+  const clean = (rawText || '').trim();
+  if (!clean) return 1;
+
+  const rawSections = clean
+    .split(/\n\s*---\s*\n|\n\s*===\s*\n|\n{3,}/)
+    .map((s) => s.trim())
+    .filter(Boolean);
+
+  return Math.max(1, rawSections.length);
+}
