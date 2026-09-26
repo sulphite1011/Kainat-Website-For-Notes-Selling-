@@ -255,6 +255,8 @@ export async function apiSaveNote(noteData: Partial<NoteItem>, editNoteId?: stri
       ? (noteData.topicsCovered as string).split(',').map((s) => s.trim()).filter(Boolean)
       : existing?.topicsCovered || [];
 
+    const sampleLimit = noteData.previewPageLimit || existing?.previewPageLimit || 3;
+
     const generatedPages = (noteData as any).rawTextContent
       ? generatePagesFromRawContent(
           (noteData as any).rawTextContent,
@@ -272,12 +274,15 @@ export async function apiSaveNote(noteData: Partial<NoteItem>, editNoteId?: stri
           topics
         );
 
+    const previewSlices = generatedPages.slice(0, sampleLimit);
+
     if (existingIndex !== -1) {
       savedNote = {
         ...currentNotes[existingIndex],
         ...noteData,
         id: editNoteId,
-        previewPages: (noteData as any).rawTextContent ? generatedPages : currentNotes[existingIndex].previewPages || generatedPages,
+        previewPageLimit: sampleLimit,
+        previewPages: previewSlices,
         fullContentPages: (noteData as any).rawTextContent ? generatedPages : currentNotes[existingIndex].fullContentPages || generatedPages,
       } as NoteItem;
       currentNotes[existingIndex] = savedNote;
@@ -287,7 +292,8 @@ export async function apiSaveNote(noteData: Partial<NoteItem>, editNoteId?: stri
         rating: 5.0,
         reviewsCount: 1,
         ...noteData,
-        previewPages: generatedPages,
+        previewPageLimit: sampleLimit,
+        previewPages: previewSlices,
         fullContentPages: generatedPages,
       } as NoteItem;
       currentNotes.unshift(savedNote);
@@ -300,6 +306,8 @@ export async function apiSaveNote(noteData: Partial<NoteItem>, editNoteId?: stri
       ? (noteData.topicsCovered as string).split(',').map((s) => s.trim()).filter(Boolean)
       : [];
 
+    const sampleLimit = noteData.previewPageLimit || 3;
+
     const generatedPages = generatePagesFromRawContent(
       (noteData as any).rawTextContent || '',
       noteData.title || 'Untitled Note',
@@ -307,6 +315,8 @@ export async function apiSaveNote(noteData: Partial<NoteItem>, editNoteId?: stri
       noteData.classLevel || 'Matric-9th',
       topics
     );
+
+    const previewSlices = generatedPages.slice(0, sampleLimit);
 
     savedNote = {
       id: newId,
@@ -322,8 +332,9 @@ export async function apiSaveNote(noteData: Partial<NoteItem>, editNoteId?: stri
       pricePKR: Number(noteData.pricePKR) || 199,
       topicsCovered: topics,
       googleDriveUrl: noteData.googleDriveUrl || '',
+      previewPageLimit: sampleLimit,
       coverImage: noteData.coverImage || '/images/matric_notes_cover_1790249191068.jpg',
-      previewPages: generatedPages,
+      previewPages: previewSlices,
       fullContentPages: generatedPages,
       rating: 4.9,
       reviewsCount: 12,

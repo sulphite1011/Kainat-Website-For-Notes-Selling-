@@ -42,6 +42,7 @@ export interface NoteItem {
   topicsCovered: string[];
   googleDriveUrl: string;
   googleDriveFileId?: string;
+  previewPageLimit?: number;
   coverImage?: string;
   previewPages?: NotePage[];
   fullContentPages?: NotePage[];

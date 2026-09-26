@@ -190,6 +190,20 @@ app.get('/api/settings', (_req: Request, res: Response) => {
   res.json({ success: true, settings: db.settings });
 });
 
+app.post('/api/settings', (req: Request, res: Response) => {
+  const { siteName, logoUrl, easyPaisaNumber, whatsAppNumber, ownerEmail, mongoDbUri } = req.body;
+
+  if (siteName) db.settings.siteName = siteName;
+  if (typeof logoUrl === 'string') db.settings.logoUrl = logoUrl;
+  if (easyPaisaNumber) db.settings.easyPaisaNumber = easyPaisaNumber;
+  if (whatsAppNumber) db.settings.whatsAppNumber = whatsAppNumber;
+  if (ownerEmail) db.settings.ownerEmail = ownerEmail;
+  if (typeof mongoDbUri === 'string') db.settings.mongoDbUri = mongoDbUri;
+
+  saveDatabase(db);
+  res.json({ success: true, message: 'Settings and logo updated successfully.', settings: db.settings });
+});
+
 // ----------------------------------------------------
 // 1. Admin Authentication (Username: Kainat, Password: HamadJani)
 // ----------------------------------------------------
@@ -357,7 +371,9 @@ app.get('/api/notes', (_req: Request, res: Response) => {
     topicsCovered: n.topicsCovered,
     coverImage: n.coverImage,
     previewPagesCount: n.previewPages?.length || 0,
-    googleDriveUrl: n.googleDriveUrl
+    previewPages: n.previewPages || [],
+    googleDriveUrl: n.googleDriveUrl,
+    previewPageLimit: n.previewPageLimit || 3
   }));
   res.json({ success: true, notes: sanitized });
 });
@@ -468,6 +484,7 @@ app.post('/api/admin/notes', (req: Request, res: Response) => {
     totalPages,
     pricePKR,
     googleDriveUrl,
+    previewPageLimit,
     coverImage
   } = req.body;
 
@@ -487,6 +504,7 @@ app.post('/api/admin/notes', (req: Request, res: Response) => {
   }
 
   const newId = `note-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`;
+  const sampleLimit = Math.max(1, Number(previewPageLimit) || 3);
 
   // Generate beautiful interactive pages from raw content or defaults
   const generatedPages = generatePagesFromRawContent(
@@ -496,6 +514,8 @@ app.post('/api/admin/notes', (req: Request, res: Response) => {
     classLevel.trim(),
     topics
   );
+
+  const previewPages = generatedPages.slice(0, sampleLimit);
 
   const newNote: NoteItem = {
     id: newId,
@@ -510,9 +530,10 @@ app.post('/api/admin/notes', (req: Request, res: Response) => {
     rating: 5.0,
     reviewsCount: 1,
     topicsCovered: topics.length > 0 ? topics : ['Complete Unit Derivations', 'Board Solved Numericals', 'Important Formula Sheets'],
-    googleDriveUrl: (googleDriveUrl || '').trim() || 'https://drive.google.com/file/d/1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs/preview',
+    googleDriveUrl: (googleDriveUrl || '').trim() || '',
+    previewPageLimit: sampleLimit,
     coverImage: coverImage || '',
-    previewPages: generatedPages,
+    previewPages,
     fullContentPages: generatedPages
   };
 
@@ -550,6 +571,7 @@ app.put('/api/admin/notes/:id', (req: Request, res: Response) => {
     totalPages,
     pricePKR,
     googleDriveUrl,
+    previewPageLimit,
     coverImage
   } = req.body;
 
@@ -563,6 +585,7 @@ app.put('/api/admin/notes/:id', (req: Request, res: Response) => {
   if (pricePKR !== undefined) existing.pricePKR = Number(pricePKR);
   if (googleDriveUrl !== undefined) existing.googleDriveUrl = googleDriveUrl.trim();
   if (coverImage !== undefined) existing.coverImage = coverImage;
+  if (previewPageLimit !== undefined) existing.previewPageLimit = Math.max(1, Number(previewPageLimit) || 3);
 
   if (topicsCovered) {
     if (Array.isArray(topicsCovered)) {
@@ -572,6 +595,8 @@ app.put('/api/admin/notes/:id', (req: Request, res: Response) => {
     }
   }
 
+  const sampleLimit = existing.previewPageLimit || 3;
+
   if (rawTextContent && typeof rawTextContent === 'string' && rawTextContent.trim()) {
     const updatedPages = generatePagesFromRawContent(
       rawTextContent,
@@ -580,11 +605,13 @@ app.put('/api/admin/notes/:id', (req: Request, res: Response) => {
       existing.classLevel,
       existing.topicsCovered || []
     );
-    existing.previewPages = updatedPages;
     existing.fullContentPages = updatedPages;
+    existing.previewPages = updatedPages.slice(0, sampleLimit);
     if (!totalPages) {
       existing.totalPages = updatedPages.length;
     }
+  } else if (existing.fullContentPages && existing.fullContentPages.length > 0) {
+    existing.previewPages = existing.fullContentPages.slice(0, sampleLimit);
   }
 
   db.notes[noteIndex] = existing;

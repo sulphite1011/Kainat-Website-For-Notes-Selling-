@@ -161,6 +161,7 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
     totalPages: 24,
     pricePKR: 199,
     googleDriveUrl: '',
+    previewPageLimit: 3,
     coverImage: '',
   });
 
@@ -512,6 +513,7 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
           totalPages: 24,
           pricePKR: 199,
           googleDriveUrl: '',
+          previewPageLimit: 3,
           coverImage: '',
         });
         onRefreshData();
@@ -566,6 +568,7 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
       totalPages: note.totalPages,
       pricePKR: note.pricePKR,
       googleDriveUrl: note.googleDriveUrl,
+      previewPageLimit: note.previewPageLimit || 3,
       coverImage: note.coverImage || '',
     });
     setFormValidationErrors([]);
@@ -1311,6 +1314,7 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
                         totalPages: 24,
                         pricePKR: 199,
                         googleDriveUrl: '',
+                        previewPageLimit: 3,
                         coverImage: '',
                       });
                       setFormValidationErrors([]);
@@ -1613,6 +1617,37 @@ II. Fixation & Tissue Processing
                           isLight
                             ? 'bg-slate-50 border border-slate-300 text-slate-900'
                             : 'bg-zinc-900 border border-zinc-800 text-white'
+                        }`}
+                      />
+                    </div>
+                  </div>
+
+                  {/* Free Sample Preview Pages Limit (Kainat Protection) */}
+                  <div className={`p-3 rounded-lg border flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 ${
+                    isLight ? 'bg-amber-50/60 border-amber-200' : 'bg-amber-950/20 border-amber-900/50'
+                  }`}>
+                    <div className="space-y-0.5">
+                      <div className="flex items-center gap-1.5 text-xs font-bold text-amber-500">
+                        <Lock className="w-3.5 h-3.5" />
+                        <span>Free Sample Preview Limit (Unpaid Students)</span>
+                      </div>
+                      <p className="text-[11px] text-zinc-400">
+                        How many sample pages can unpaid students read before checkout? (Default: 3 pages)
+                      </p>
+                    </div>
+
+                    <div className="flex items-center gap-2 shrink-0">
+                      <label className="text-xs text-zinc-400 font-medium">Free Pages:</label>
+                      <input
+                        type="number"
+                        min="1"
+                        max="20"
+                        value={noteForm.previewPageLimit}
+                        onChange={(e) => setNoteForm({ ...noteForm, previewPageLimit: Math.max(1, Number(e.target.value) || 1) })}
+                        className={`w-20 rounded-lg px-2.5 py-1.5 text-xs font-mono font-bold text-center focus:outline-none focus:ring-1 focus:ring-amber-500 ${
+                          isLight
+                            ? 'bg-white border border-amber-300 text-slate-900'
+                            : 'bg-zinc-900 border border-amber-800 text-white'
                         }`}
                       />
                     </div>
