@@ -1,5 +1,7 @@
 import { NoteItem, Order, OrderNotificationAlert, SiteSettings } from '../types';
 import { initialNotesCatalog } from '../data/notesCatalog';
+import { seedNotes, seedOrders, seedNotifications, seedSettings } from '../data/seedData';
+import { generatePagesFromRawContent } from '../utils/notesFormatter';
 
 const SETTINGS_KEY = 'kainat_settings';
 const NOTES_KEY = 'kainat_notes_catalog';
@@ -7,6 +9,7 @@ const ORDERS_KEY = 'kainat_orders';
 const NOTIFS_KEY = 'kainat_notifications';
 
 export const defaultSettings: SiteSettings = {
+  ...seedSettings,
   siteName: 'Kainat Notes Hub',
   ownerName: 'Kainat',
   logoUrl: '',
@@ -46,9 +49,10 @@ export function getStoredNotes(): NoteItem[] {
   } catch {
     // ignore
   }
-  // Initialize with initial catalog
-  saveStoredNotes(initialNotesCatalog);
-  return initialNotesCatalog;
+  // Initialize with initial catalog (11 notes including BSc Thermodynamics)
+  const initial = initialNotesCatalog && initialNotesCatalog.length > 0 ? initialNotesCatalog : seedNotes;
+  saveStoredNotes(initial);
+  return initial;
 }
 
 export function saveStoredNotes(notes: NoteItem[]): void {
@@ -64,12 +68,14 @@ export function getStoredOrders(): Order[] {
     const raw = localStorage.getItem(ORDERS_KEY);
     if (raw) {
       const parsed = JSON.parse(raw);
-      if (Array.isArray(parsed)) return parsed;
+      if (Array.isArray(parsed) && parsed.length > 0) return parsed;
     }
   } catch {
     // ignore
   }
-  return [];
+  // Initialize with verified seed orders (3 verified orders = Rs. 599 revenue)
+  saveStoredOrders(seedOrders);
+  return seedOrders;
 }
 
 export function saveStoredOrders(orders: Order[]): void {
@@ -85,12 +91,13 @@ export function getStoredNotifications(): OrderNotificationAlert[] {
     const raw = localStorage.getItem(NOTIFS_KEY);
     if (raw) {
       const parsed = JSON.parse(raw);
-      if (Array.isArray(parsed)) return parsed;
+      if (Array.isArray(parsed) && parsed.length > 0) return parsed;
     }
   } catch {
     // ignore
   }
-  return [];
+  saveStoredNotifications(seedNotifications);
+  return seedNotifications;
 }
 
 export function saveStoredNotifications(notifs: OrderNotificationAlert[]): void {
@@ -240,11 +247,38 @@ export async function apiSaveNote(noteData: Partial<NoteItem>, editNoteId?: stri
 
   if (editNoteId) {
     const existingIndex = currentNotes.findIndex((n) => n.id === editNoteId);
+    const existing = existingIndex !== -1 ? currentNotes[existingIndex] : null;
+
+    const topics = Array.isArray(noteData.topicsCovered)
+      ? noteData.topicsCovered
+      : typeof noteData.topicsCovered === 'string'
+      ? (noteData.topicsCovered as string).split(',').map((s) => s.trim()).filter(Boolean)
+      : existing?.topicsCovered || [];
+
+    const generatedPages = (noteData as any).rawTextContent
+      ? generatePagesFromRawContent(
+          (noteData as any).rawTextContent,
+          noteData.title || existing?.title || 'Note',
+          noteData.chapterTitle || existing?.chapterTitle || '',
+          noteData.classLevel || existing?.classLevel || '',
+          topics
+        )
+      : existing?.fullContentPages ||
+        generatePagesFromRawContent(
+          '',
+          noteData.title || existing?.title || 'Note',
+          noteData.chapterTitle || existing?.chapterTitle || '',
+          noteData.classLevel || existing?.classLevel || '',
+          topics
+        );
+
     if (existingIndex !== -1) {
       savedNote = {
         ...currentNotes[existingIndex],
         ...noteData,
         id: editNoteId,
+        previewPages: (noteData as any).rawTextContent ? generatedPages : currentNotes[existingIndex].previewPages || generatedPages,
+        fullContentPages: (noteData as any).rawTextContent ? generatedPages : currentNotes[existingIndex].fullContentPages || generatedPages,
       } as NoteItem;
       currentNotes[existingIndex] = savedNote;
     } else {
@@ -253,11 +287,27 @@ export async function apiSaveNote(noteData: Partial<NoteItem>, editNoteId?: stri
         rating: 5.0,
         reviewsCount: 1,
         ...noteData,
+        previewPages: generatedPages,
+        fullContentPages: generatedPages,
       } as NoteItem;
       currentNotes.unshift(savedNote);
     }
   } else {
     const newId = `note-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`;
+    const topics = Array.isArray(noteData.topicsCovered)
+      ? noteData.topicsCovered
+      : typeof noteData.topicsCovered === 'string'
+      ? (noteData.topicsCovered as string).split(',').map((s) => s.trim()).filter(Boolean)
+      : [];
+
+    const generatedPages = generatePagesFromRawContent(
+      (noteData as any).rawTextContent || '',
+      noteData.title || 'Untitled Note',
+      noteData.chapterTitle || '',
+      noteData.classLevel || 'Matric-9th',
+      topics
+    );
+
     savedNote = {
       id: newId,
       title: noteData.title || 'Untitled Note',
@@ -266,15 +316,13 @@ export async function apiSaveNote(noteData: Partial<NoteItem>, editNoteId?: stri
       chapterNumber: Number(noteData.chapterNumber) || 1,
       chapterTitle: noteData.chapterTitle || '',
       description: noteData.description || '',
-      totalPages: Number(noteData.totalPages) || 20,
+      totalPages: Number(noteData.totalPages) || generatedPages.length || 20,
       pricePKR: Number(noteData.pricePKR) || 199,
-      topicsCovered: Array.isArray(noteData.topicsCovered)
-        ? noteData.topicsCovered
-        : typeof noteData.topicsCovered === 'string'
-        ? (noteData.topicsCovered as string).split(',').map((s) => s.trim()).filter(Boolean)
-        : [],
+      topicsCovered: topics,
       googleDriveUrl: noteData.googleDriveUrl || '',
       coverImage: noteData.coverImage || '/images/matric_notes_cover_1790249191068.jpg',
+      previewPages: generatedPages,
+      fullContentPages: generatedPages,
       rating: 4.9,
       reviewsCount: 12,
     };
@@ -387,7 +435,9 @@ export async function apiGetOrders(): Promise<{ orders: Order[]; stats: any; not
     orders: storedOrders,
     stats: {
       totalOrders: storedOrders.length,
+      pendingCount,
       pendingOrders: pendingCount,
+      verifiedCount,
       verifiedOrders: verifiedCount,
       totalRevenuePKR,
     },

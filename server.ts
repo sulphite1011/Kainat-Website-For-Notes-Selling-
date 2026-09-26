@@ -5,6 +5,7 @@ import { fileURLToPath } from 'url';
 import dotenv from 'dotenv';
 import { initialNotesCatalog } from './src/data/notesCatalog.ts';
 import { Order, OrderNotificationAlert, NoteItem, SiteSettings } from './src/types/index.ts';
+import { generatePagesFromRawContent } from './src/utils/notesFormatter.ts';
 
 dotenv.config();
 
@@ -463,6 +464,7 @@ app.post('/api/admin/notes', (req: Request, res: Response) => {
     chapterTitle,
     topicsCovered,
     description,
+    rawTextContent,
     totalPages,
     pricePKR,
     googleDriveUrl,
@@ -486,18 +488,14 @@ app.post('/api/admin/notes', (req: Request, res: Response) => {
 
   const newId = `note-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`;
 
-  // Create default sample pages if none supplied
-  const defaultSamplePages = [
-    {
-      pageNumber: 1,
-      title: `${chapterTitle} - Unit Overview & Core Concepts`,
-      section: 'Section 1.1 - Definition & Board Derivations',
-      keyPoints: topics.length > 0 ? topics : ['Comprehensive handwritten summary and conceptual definitions.', 'Board repeated questions solved step by step.'],
-      formulas: [`\\text{Unit: } ${chapterTitle}`, `\\text{Class: } ${classLevel}`],
-      boardQuestions: [`Important 5-mark derivation from Unit ${chapterNumber || 1}`],
-      contentHtml: `<p><strong>${title}</strong></p><p>Curated by Kainat. Includes detailed formulas, derivations, and board examination solutions for ${classLevel}.</p>`
-    }
-  ];
+  // Generate beautiful interactive pages from raw content or defaults
+  const generatedPages = generatePagesFromRawContent(
+    rawTextContent || '',
+    title.trim(),
+    chapterTitle.trim(),
+    classLevel.trim(),
+    topics
+  );
 
   const newNote: NoteItem = {
     id: newId,
@@ -507,15 +505,15 @@ app.post('/api/admin/notes', (req: Request, res: Response) => {
     chapterNumber: Number(chapterNumber) || 1,
     chapterTitle: chapterTitle.trim(),
     description: description ? description.trim() : `Complete chapter source notes for ${classLevel} ${subject}.`,
-    totalPages: Number(totalPages) || 20,
+    totalPages: Number(totalPages) || generatedPages.length || 20,
     pricePKR: Number(pricePKR) || 199,
     rating: 5.0,
     reviewsCount: 1,
     topicsCovered: topics.length > 0 ? topics : ['Complete Unit Derivations', 'Board Solved Numericals', 'Important Formula Sheets'],
     googleDriveUrl: (googleDriveUrl || '').trim() || 'https://drive.google.com/file/d/1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs/preview',
     coverImage: coverImage || '',
-    previewPages: defaultSamplePages,
-    fullContentPages: defaultSamplePages
+    previewPages: generatedPages,
+    fullContentPages: generatedPages
   };
 
   db.notes.unshift(newNote);
@@ -548,6 +546,7 @@ app.put('/api/admin/notes/:id', (req: Request, res: Response) => {
     chapterTitle,
     topicsCovered,
     description,
+    rawTextContent,
     totalPages,
     pricePKR,
     googleDriveUrl,
@@ -570,6 +569,21 @@ app.put('/api/admin/notes/:id', (req: Request, res: Response) => {
       existing.topicsCovered = topicsCovered;
     } else if (typeof topicsCovered === 'string') {
       existing.topicsCovered = topicsCovered.split(',').map(t => t.trim()).filter(Boolean);
+    }
+  }
+
+  if (rawTextContent && typeof rawTextContent === 'string' && rawTextContent.trim()) {
+    const updatedPages = generatePagesFromRawContent(
+      rawTextContent,
+      existing.title,
+      existing.chapterTitle,
+      existing.classLevel,
+      existing.topicsCovered || []
+    );
+    existing.previewPages = updatedPages;
+    existing.fullContentPages = updatedPages;
+    if (!totalPages) {
+      existing.totalPages = updatedPages.length;
     }
   }
 

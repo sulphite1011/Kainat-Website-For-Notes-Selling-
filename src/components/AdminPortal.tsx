@@ -31,6 +31,7 @@ import {
   Moon
 } from 'lucide-react';
 import { KainatLogo } from './KainatLogo';
+import { CircularLogoCropper } from './CircularLogoCropper';
 import { sound } from '../utils/soundEffects';
 import {
   apiAdminLogin,
@@ -138,6 +139,7 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
   const [whatsAppInput, setWhatsAppInput] = useState<string>(settings.whatsAppNumber || '0324 9059918');
   const [isUploadingLogo, setIsUploadingLogo] = useState(false);
   const [isSavingSettings, setIsSavingSettings] = useState(false);
+  const [rawLogoForCropping, setRawLogoForCropping] = useState<string | null>(null);
 
   // Note creation & editing state
   const [isEditingNote, setIsEditingNote] = useState(false);
@@ -154,6 +156,7 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
     chapterTitle: '',
     topicsCovered: '',
     description: '',
+    rawTextContent: '',
     totalPages: 24,
     pricePKR: 199,
     googleDriveUrl: '',
@@ -345,36 +348,49 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
     }
   };
 
-  // Handle Logo Upload (Auto-upload to /uploads/ and save)
+  // Handle Logo Upload (Opens circular Instagram-style cropper)
   const handleLogoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
     try {
-      setIsUploadingLogo(true);
       const reader = new FileReader();
-      reader.onload = async () => {
+      reader.onload = () => {
         const base64Data = reader.result as string;
-        const uploadData = await apiUploadImage(base64Data, 'logo_' + Date.now());
-        const newLogoUrl = uploadData.url;
-        setLogoPreview(newLogoUrl);
-
-        const newSettings = { ...settings, logoUrl: newLogoUrl };
-        const saveData = await apiSaveSettings(newSettings);
-        if (saveData.success) {
-          onUpdateSettings(saveData.settings);
-          showNotification(`Logo uploaded and saved to website branding!`);
-          sound.verified();
-          onRefreshData();
-        } else {
-          showNotification('Error saving logo settings.', true);
-        }
-        setIsUploadingLogo(false);
+        setRawLogoForCropping(base64Data);
       };
       reader.readAsDataURL(file);
     } catch {
+      showNotification('Error reading image file.', true);
+    } finally {
+      // Reset input value so re-selecting same file triggers change
+      e.target.value = '';
+    }
+  };
+
+  // Called when user finishes cropping their circular Instagram-style logo
+  const handleApplyCroppedLogo = async (croppedDataUrl: string) => {
+    try {
+      setIsUploadingLogo(true);
+      setRawLogoForCropping(null);
+      const uploadData = await apiUploadImage(croppedDataUrl, 'logo_circular_' + Date.now());
+      const newLogoUrl = uploadData.url;
+      setLogoPreview(newLogoUrl);
+
+      const newSettings = { ...settings, logoUrl: newLogoUrl };
+      const saveData = await apiSaveSettings(newSettings);
+      if (saveData.success) {
+        onUpdateSettings(saveData.settings);
+        showNotification('Circular Instagram-style logo saved & updated across site!');
+        sound.verified();
+        onRefreshData();
+      } else {
+        showNotification('Error saving logo settings.', true);
+      }
+    } catch {
+      showNotification('Error saving circular logo picture.', true);
+    } finally {
       setIsUploadingLogo(false);
-      showNotification('Error uploading logo picture.', true);
     }
   };
 
@@ -491,6 +507,7 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
           chapterTitle: '',
           topicsCovered: '',
           description: '',
+          rawTextContent: '',
           totalPages: 24,
           pricePKR: 199,
           googleDriveUrl: '',
@@ -542,6 +559,9 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
       chapterTitle: note.chapterTitle,
       topicsCovered: note.topicsCovered?.join(', ') || '',
       description: note.description,
+      rawTextContent: note.fullContentPages?.[0]?.contentHtml
+        ? note.fullContentPages.map((p) => `### ${p.title}\n${p.keyPoints?.map((k) => `• ${k}`).join('\n') || ''}\n\n`).join('---\n')
+        : '',
       totalPages: note.totalPages,
       pricePKR: note.pricePKR,
       googleDriveUrl: note.googleDriveUrl,
@@ -1286,6 +1306,7 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
                         chapterTitle: '',
                         topicsCovered: '',
                         description: '',
+                        rawTextContent: '',
                         totalPages: 24,
                         pricePKR: 199,
                         googleDriveUrl: '',
@@ -1477,6 +1498,51 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
                           : 'bg-zinc-900 border border-zinc-800 text-white'
                       }`}
                     />
+                  </div>
+
+                  {/* Paste Text / Curriculum To Create Beautiful Interactive Notes */}
+                  <div className={`p-3.5 sm:p-4 rounded-xl border space-y-2 ${
+                    isLight ? 'bg-emerald-50/50 border-emerald-200' : 'bg-emerald-950/20 border-emerald-800/50'
+                  }`}>
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <Sparkles className="w-4 h-4 text-emerald-500" />
+                        <label className={`text-xs font-bold ${isLight ? 'text-emerald-950' : 'text-emerald-300'}`}>
+                          Paste Note Content or Textbook/Curriculum Text (Instant Beautiful Notes Generator)
+                        </label>
+                      </div>
+                      <span className="text-[10px] text-zinc-400 font-mono">
+                        Auto-splits into formatted pages with formulas, bullets & board questions
+                      </span>
+                    </div>
+
+                    <textarea
+                      rows={5}
+                      value={noteForm.rawTextContent}
+                      onChange={(e) => setNoteForm({ ...noteForm, rawTextContent: e.target.value })}
+                      placeholder="Paste your curriculum, syllabus, or lecture notes text here! Example:
+I. Microscopy
+• Principle of Simple & Compound Microscopes
+• Handling and working of microscope
+• Care, Cleaning & Quality Control of Microscope
+
+II. Fixation & Tissue Processing
+• The purpose of fixation (Formaldehyde, Zenker's solution)
+• Factors affecting quality of fixation
+---
+(Separate pages with '---' or paste continuous text)"
+                      className={`w-full rounded-lg px-3 py-2 text-xs font-mono focus:outline-none focus:ring-1 focus:ring-emerald-500 leading-relaxed ${
+                        isLight
+                          ? 'bg-white border border-emerald-300 text-slate-900 placeholder:text-slate-400'
+                          : 'bg-zinc-900 border border-emerald-900/60 text-zinc-100 placeholder:text-zinc-500'
+                      }`}
+                    />
+                    <div className="text-[11px] text-emerald-600 dark:text-emerald-400 flex items-center gap-1.5 font-medium">
+                      <span>✓</span>
+                      <span>
+                        Students will be able to read these beautiful formatted digital notes inside the Secure Document Viewer as well as see previews!
+                      </span>
+                    </div>
                   </div>
 
                   <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4">
@@ -2243,6 +2309,15 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
             </div>
           </div>
         </div>
+      )}
+      {/* Instagram-Style Circular Logo Cropper Modal */}
+      {rawLogoForCropping && (
+        <CircularLogoCropper
+          imageSrc={rawLogoForCropping}
+          isLight={isLight}
+          onCropComplete={handleApplyCroppedLogo}
+          onCancel={() => setRawLogoForCropping(null)}
+        />
       )}
     </div>
   );

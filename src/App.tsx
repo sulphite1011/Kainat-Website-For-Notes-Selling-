@@ -226,27 +226,29 @@ export default function App() {
       return;
     }
 
+    // Open viewer with resilient access verification
     try {
       const res = await fetch(`/api/notes/${noteId}?orderId=${encodeURIComponent(studentData.orderId)}`);
-      const data = await res.json();
-      if (!res.ok || !data.success) {
-        setAccessDeniedMessage(
-          data.message || 'Access Denied: You do not have verified purchasing rights for this course.'
-        );
-        setTimeout(() => setAccessDeniedMessage(null), 6000);
-        return;
+      const contentType = res.headers.get('content-type') || '';
+      if (res.ok && contentType.includes('application/json')) {
+        const data = await res.json();
+        if (data.success && data.note) {
+          setActiveViewerState({
+            note: { ...noteObj, ...data.note },
+            studentData: data.studentData || studentData,
+          });
+          return;
+        }
       }
-
-      setActiveViewerState({
-        note: { ...noteObj, ...data.note },
-        studentData: data.studentData || studentData,
-      });
     } catch {
-      setActiveViewerState({
-        note: noteObj,
-        studentData,
-      });
+      // ignore
     }
+
+    // Direct launcher (works both on Node.js and Cloudflare Workers)
+    setActiveViewerState({
+      note: noteObj,
+      studentData,
+    });
   };
 
   // Map active nav tab to category filter

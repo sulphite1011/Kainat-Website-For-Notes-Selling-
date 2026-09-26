@@ -10,10 +10,13 @@ import {
   ShieldAlert, 
   Maximize2, 
   Minimize2, 
-  Sun,
-  Moon,
-  Lock
+  Sun, 
+  Moon, 
+  Lock,
+  ExternalLink,
+  BookOpen
 } from 'lucide-react';
+import { formatGoogleDrivePreviewUrl, isDriveOrPdfUrl } from '../utils/driveUrlHelper';
 
 interface SecureDocumentViewerProps {
   note: NoteItem;
@@ -369,16 +372,58 @@ export const SecureDocumentViewer: React.FC<SecureDocumentViewerProps> = ({
         {/* View Mode 2: Google Drive PDF Protected Viewport */}
         {viewMode === 'drive' && (
           <div className="relative w-full h-full flex flex-col items-center justify-center p-2 sm:p-4">
-            <div className="relative w-full max-w-5xl h-full rounded-xl overflow-hidden border border-zinc-800 bg-zinc-900 shadow-2xl">
-              {/* Shield overlay intercepting pop-out & download clicks on the Google Drive preview */}
-              <div className="absolute top-0 right-0 w-32 h-16 z-20 cursor-not-allowed bg-transparent" />
+            <div className="relative w-full max-w-5xl h-full rounded-xl overflow-hidden border border-zinc-800 bg-zinc-900 shadow-2xl flex flex-col">
+              {/* Top Banner with Open In Google Drive option */}
+              <div className="px-4 py-2.5 bg-zinc-950 border-b border-zinc-800 flex items-center justify-between text-xs shrink-0">
+                <div className="flex items-center gap-2 text-zinc-300">
+                  <BookOpen className="w-4 h-4 text-emerald-400" />
+                  <span className="font-semibold text-white truncate max-w-sm">{note.title}</span>
+                  <span className="text-[10px] px-1.5 py-0.5 rounded bg-emerald-950 text-emerald-300 border border-emerald-800 font-mono">
+                    PDF Document
+                  </span>
+                </div>
 
-              <iframe
-                src={note.googleDriveUrl}
-                title={note.title}
-                className="w-full h-full border-0"
-                sandbox="allow-scripts allow-same-origin"
-              />
+                <div className="flex items-center gap-3">
+                  {note.googleDriveUrl && (
+                    <a
+                      href={note.googleDriveUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="flex items-center gap-1.5 px-3 py-1 bg-emerald-600/90 hover:bg-emerald-500 text-white rounded-md text-xs font-semibold shadow-sm transition-colors"
+                    >
+                      <span>Open Drive Window</span>
+                      <ExternalLink className="w-3.5 h-3.5" />
+                    </a>
+                  )}
+                </div>
+              </div>
+
+              {/* PDF Preview Frame */}
+              <div className="relative flex-1 w-full h-full bg-zinc-950">
+                {note.googleDriveUrl ? (
+                  <iframe
+                    src={formatGoogleDrivePreviewUrl(note.googleDriveUrl)}
+                    title={note.title}
+                    className="w-full h-full border-0"
+                    allow="autoplay"
+                    sandbox="allow-scripts allow-same-origin allow-popups"
+                  />
+                ) : (
+                  <div className="flex flex-col items-center justify-center h-full p-6 text-center space-y-3">
+                    <BookOpen className="w-12 h-12 text-zinc-600" />
+                    <h4 className="text-sm font-bold text-white">Google Drive PDF Document</h4>
+                    <p className="text-xs text-zinc-400 max-w-md">
+                      This course note is available in Google Drive format. You can switch to the "Digital Paginated Notes" tab to read all high-yield notes.
+                    </p>
+                  </div>
+                )}
+              </div>
+
+              {/* Watermark student footer */}
+              <div className="px-4 py-1.5 bg-zinc-950 border-t border-zinc-800 flex items-center justify-between text-[11px] text-zinc-500 font-mono shrink-0">
+                <span>Paying Student: {studentData.email}</span>
+                <span>Order Reference: #{studentData.orderId}</span>
+              </div>
             </div>
           </div>
         )}

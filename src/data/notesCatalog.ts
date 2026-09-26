@@ -1,6 +1,76 @@
 import { NoteItem } from '../types';
 
 export const initialNotesCatalog: NoteItem[] = [
+  // --- BSC / UNIVERSITY GRADE ---
+  {
+    id: 'note-1790251691494-1kal',
+    title: 'Thermodynamics & Heat Engines',
+    classLevel: 'BSc-Year2',
+    subject: 'Physics',
+    chapterNumber: 4,
+    chapterTitle: 'Heat & Thermodynamics',
+    description: 'Comprehensive BSc notes by Kainat with derivations, Carnot cycle analysis, and board examination solutions.',
+    totalPages: 20,
+    pricePKR: 250,
+    rating: 5.0,
+    reviewsCount: 1,
+    topicsCovered: [
+      'Carnot Cycle',
+      'Entropy',
+      'Laws of Thermodynamics',
+      'Heat Engine Efficiency',
+      'Maxwell Relations'
+    ],
+    googleDriveUrl: 'https://drive.google.com/file/d/1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs/preview',
+    googleDriveFileId: '1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs',
+    coverImage: '/images/bsc_notes_cover_1790249216045.jpg',
+    previewPages: [
+      {
+        pageNumber: 1,
+        title: 'Heat & Thermodynamics - Unit Overview & Core Concepts',
+        section: 'Section 4.1 - Laws of Thermodynamics & Heat Engines',
+        keyPoints: [
+          'Zeroth Law: Establishes temperature equilibrium across thermal contacts.',
+          'First Law (ΔU = Q - W): Energy conservation principle in thermodynamic transformations.',
+          'Second Law: Heat cannot spontaneously flow from cold reservoir to hot reservoir.',
+          'Carnot Engine: Theoretical limit of efficiency given by η = 1 - (T_c / T_h).'
+        ],
+        formulas: [
+          'First Law: \\Delta U = Q - W',
+          'Carnot Efficiency: \\eta = 1 - \\frac{T_c}{T_h}',
+          'Entropy Change: \\Delta S = \\int \\frac{dQ_{rev}}{T}'
+        ],
+        boardQuestions: [
+          'Derive the mathematical expression for efficiency of Carnot Heat Engine (5 Marks).',
+          'Explain the physical significance of Entropy in irreversible processes.'
+        ],
+        contentHtml: `<p><strong>Thermodynamics & Heat Engines:</strong> Curated by Kainat. Includes detailed formulas, derivations, and board examination solutions for BSc-Year2. Covers reversible cycles, entropy increase theorem, and work output calculations.</p>`
+      }
+    ],
+    fullContentPages: [
+      {
+        pageNumber: 1,
+        title: 'Heat & Thermodynamics - Unit Overview & Core Concepts',
+        section: 'Section 4.1 - Laws of Thermodynamics & Heat Engines',
+        keyPoints: [
+          'Zeroth Law: Establishes temperature equilibrium across thermal contacts.',
+          'First Law (ΔU = Q - W): Energy conservation principle in thermodynamic transformations.',
+          'Second Law: Heat cannot spontaneously flow from cold reservoir to hot reservoir.',
+          'Carnot Engine: Theoretical limit of efficiency given by η = 1 - (T_c / T_h).'
+        ],
+        formulas: [
+          'First Law: \\Delta U = Q - W',
+          'Carnot Efficiency: \\eta = 1 - \\frac{T_c}{T_h}',
+          'Entropy Change: \\Delta S = \\int \\frac{dQ_{rev}}{T}'
+        ],
+        boardQuestions: [
+          'Derive the mathematical expression for efficiency of Carnot Heat Engine (5 Marks).',
+          'Explain the physical significance of Entropy in irreversible processes.'
+        ],
+        contentHtml: `<p><strong>Thermodynamics & Heat Engines:</strong> Curated by Kainat. Includes detailed formulas, derivations, and board examination solutions for BSc-Year2. Covers reversible cycles, entropy increase theorem, and work output calculations.</p>`
+      }
+    ]
+  },
   // --- MATRIC 9TH GRADE ---
   {
     id: 'mat9-phy-ch2',
