@@ -192,7 +192,7 @@ app.get('/api/settings', (_req: Request, res: Response) => {
 });
 
 app.post('/api/settings', (req: Request, res: Response) => {
-  const { siteName, logoUrl, easyPaisaNumber, whatsAppNumber, ownerEmail, mongoDbUri } = req.body;
+  const { siteName, logoUrl, easyPaisaNumber, whatsAppNumber, ownerEmail, mongoDbUri, clerkPublishableKey, googleClientId } = req.body;
 
   if (siteName) db.settings.siteName = siteName;
   if (typeof logoUrl === 'string') db.settings.logoUrl = logoUrl;
@@ -200,6 +200,8 @@ app.post('/api/settings', (req: Request, res: Response) => {
   if (whatsAppNumber) db.settings.whatsAppNumber = whatsAppNumber;
   if (ownerEmail) db.settings.ownerEmail = ownerEmail;
   if (typeof mongoDbUri === 'string') db.settings.mongoDbUri = mongoDbUri;
+  if (typeof clerkPublishableKey === 'string') (db.settings as any).clerkPublishableKey = clerkPublishableKey;
+  if (typeof googleClientId === 'string') (db.settings as any).googleClientId = googleClientId;
 
   saveDatabase(db);
   res.json({ success: true, message: 'Settings and logo updated successfully.', settings: db.settings });

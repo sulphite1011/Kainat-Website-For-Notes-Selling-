@@ -125,6 +125,9 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
   const [smtpPassInput, setSmtpPassInput] = useState<string>(settings.smtpPass || '');
   const [smtpSenderEmailInput, setSmtpSenderEmailInput] = useState<string>(settings.smtpSenderEmail || settings.ownerEmail || 'ka8984510@gmail.com');
   const [googleClientIdInput, setGoogleClientIdInput] = useState<string>(settings.googleClientId || '');
+  const [clerkPublishableKeyInput, setClerkPublishableKeyInput] = useState<string>(
+    settings.clerkPublishableKey || localStorage.getItem('kainat_clerk_pub_key') || (import.meta as any).env?.VITE_CLERK_PUBLISHABLE_KEY || ''
+  );
   const [isTestingSmtp, setIsTestingSmtp] = useState(false);
   const [smtpTestResult, setSmtpTestResult] = useState<{ success: boolean; message: string } | null>(null);
 
@@ -446,7 +449,16 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
         smtpPass: smtpPassInput.trim(),
         smtpSenderEmail: smtpSenderEmailInput.trim(),
         googleClientId: googleClientIdInput.trim(),
+        clerkPublishableKey: clerkPublishableKeyInput.trim(),
       };
+
+      try {
+        if (clerkPublishableKeyInput.trim()) {
+          localStorage.setItem('kainat_clerk_pub_key', clerkPublishableKeyInput.trim());
+        }
+      } catch {
+        // ignore
+      }
 
       const data = await apiSaveSettings(newSettings);
       if (data.success) {
@@ -2380,32 +2392,53 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
                 </div>
               </div>
 
-              {/* 2. Official Google OAuth Sign-In Setup */}
+              {/* 2. Official Clerk Authentication (1-Click Google & Gmail Login) */}
               <div className={`p-4 sm:p-5 rounded-xl border space-y-4 ${
                 isLight ? 'bg-white border-slate-200 shadow-xs' : 'bg-zinc-950/60 border-zinc-800'
               }`}>
                 <div className="flex items-center justify-between border-b pb-2">
-                  <h4 className={`text-xs font-bold uppercase tracking-wider ${isLight ? 'text-slate-800' : 'text-zinc-200'}`}>
-                    2. Official 3rd-Party Google Sign-In (OAuth / GIS)
-                  </h4>
-                  <span className="text-[11px] text-blue-500 font-mono">1-Click Login</span>
+                  <div className="flex items-center gap-2">
+                    <h4 className={`text-xs font-bold uppercase tracking-wider ${isLight ? 'text-slate-800' : 'text-zinc-200'}`}>
+                      2. Clerk Authentication (1-Click Google & Gmail Login)
+                    </h4>
+                    <span className="text-[10px] px-2 py-0.5 rounded-full font-bold bg-purple-500/10 text-purple-400 border border-purple-500/20">
+                      Recommended
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-1.5 text-[11px]">
+                    <div className={`w-2 h-2 rounded-full ${clerkPublishableKeyInput.trim().startsWith('pk_') ? 'bg-emerald-500 animate-pulse' : 'bg-amber-500'}`} />
+                    <span className={clerkPublishableKeyInput.trim().startsWith('pk_') ? 'text-emerald-400 font-semibold' : 'text-amber-400'}>
+                      {clerkPublishableKeyInput.trim().startsWith('pk_') ? 'Clerk Active' : 'Key Needed'}
+                    </span>
+                  </div>
                 </div>
 
                 <div className="space-y-1.5">
-                  <label className={`text-xs font-semibold ${isLight ? 'text-slate-700' : 'text-zinc-300'}`}>
-                    Google OAuth Client ID (Optional for 1-Click "Continue with Google" Button)
-                  </label>
+                  <div className="flex items-center justify-between">
+                    <label className={`text-xs font-semibold ${isLight ? 'text-slate-700' : 'text-zinc-300'}`}>
+                      Clerk Publishable Key (<code className="font-mono text-[11px] text-emerald-400">pk_test_...</code> or <code className="font-mono text-[11px] text-emerald-400">pk_live_...</code>)
+                    </label>
+                    <a
+                      href="https://dashboard.clerk.com"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-[11px] text-purple-400 hover:text-purple-300 hover:underline flex items-center gap-1"
+                    >
+                      <span>Open Clerk Dashboard</span>
+                      <ExternalLink className="w-2.5 h-2.5" />
+                    </a>
+                  </div>
                   <input
                     type="text"
-                    value={googleClientIdInput}
-                    onChange={(e) => setGoogleClientIdInput(e.target.value)}
-                    placeholder="xxxxxxxxxxxx-xxxxxxxxxxxxxxxx.apps.googleusercontent.com"
-                    className={`w-full rounded-lg px-3 py-2 text-xs font-mono focus:outline-none focus:ring-1 focus:ring-emerald-500 ${
+                    value={clerkPublishableKeyInput}
+                    onChange={(e) => setClerkPublishableKeyInput(e.target.value)}
+                    placeholder="pk_test_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+                    className={`w-full rounded-lg px-3 py-2 text-xs font-mono focus:outline-none focus:ring-1 focus:ring-purple-500 ${
                       isLight ? 'bg-slate-50 border border-slate-300 text-slate-900' : 'bg-zinc-900 border border-zinc-800 text-white'
                     }`}
                   />
                   <p className="text-[11px] text-zinc-500">
-                    Create a free Web OAuth Client ID in <a href="https://console.cloud.google.com/apis/credentials" target="_blank" rel="noopener noreferrer" className="text-emerald-500 hover:underline">Google Cloud Console</a>. When pasted here, students can sign in with 1 click using Google without needing an OTP code!
+                    Paste your Clerk Publishable Key from <a href="https://dashboard.clerk.com" target="_blank" rel="noopener noreferrer" className="text-purple-400 hover:underline">dashboard.clerk.com</a> &gt; <strong>API Keys</strong>. With Clerk, students sign in with 1-click using their Google account with zero passwords or OTP codes required!
                   </p>
                 </div>
               </div>
@@ -2415,15 +2448,15 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
                 type="button"
                 onClick={handleSaveSettings}
                 disabled={isSavingSettings}
-                className="w-full py-3 px-4 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs font-bold shadow-lg shadow-emerald-950/40 transition-all flex items-center justify-center gap-2 active:scale-95"
+                className="w-full py-3 px-4 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs font-bold shadow-lg shadow-emerald-950/40 transition-all flex items-center justify-center gap-2 active:scale-95 cursor-pointer"
               >
                 {isSavingSettings ? (
                   <>
                     <RefreshCw className="w-4 h-4 animate-spin" />
-                    <span>Saving Email & Google Auth Credentials...</span>
+                    <span>Saving Email & Clerk Auth Credentials...</span>
                   </>
                 ) : (
-                  <span>Save Email (SMTP) & Google Sign-In Settings</span>
+                  <span>Save Email (SMTP) & Clerk Auth Settings</span>
                 )}
               </button>
             </div>

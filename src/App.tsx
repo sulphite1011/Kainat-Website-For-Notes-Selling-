@@ -14,6 +14,7 @@ import { SecureDocumentViewer } from './components/SecureDocumentViewer';
 import { OrderTracker } from './components/OrderTracker';
 import { StudentLibrary } from './components/StudentLibrary';
 import { StudentAuthModal } from './components/StudentAuthModal';
+import { ClerkAuthProvider } from './context/ClerkContext';
 import { AdminPortal } from './components/AdminPortal';
 import { RealtimeAlertBanner } from './components/RealtimeAlertBanner';
 import { Footer } from './components/Footer';
@@ -312,10 +313,28 @@ export default function App() {
     });
   };
 
+  const handleStudentSync = useCallback((stu: StudentUser | null) => {
+    if (stu) {
+      setCurrentStudent(stu);
+      apiGetStudentOrders(stu.email).then((remoteOrders) => {
+        if (remoteOrders && remoteOrders.length > 0) {
+          setOrders((prev) => {
+            const map = new Map<string, Order>();
+            [...remoteOrders, ...prev].forEach((o) => map.set(o.id, o));
+            return Array.from(map.values());
+          });
+        }
+      });
+    } else {
+      setCurrentStudent(null);
+    }
+  }, []);
+
   return (
-    <div className={`min-h-screen flex flex-col font-sans transition-colors ${
-      theme === 'light' ? 'bg-slate-50 text-slate-900' : 'bg-zinc-950 text-zinc-100'
-    }`}>
+    <ClerkAuthProvider onStudentSync={handleStudentSync}>
+      <div className={`min-h-screen flex flex-col font-sans transition-colors ${
+        theme === 'light' ? 'bg-slate-50 text-slate-900' : 'bg-zinc-950 text-zinc-100'
+      }`}>
       {/* Real-time automated alert notification banner */}
       <RealtimeAlertBanner
         onOpenLibrary={() => setActiveTab('library')}
@@ -508,6 +527,7 @@ export default function App() {
           onToggleTheme={handleToggleTheme}
         />
       )}
-    </div>
+      </div>
+    </ClerkAuthProvider>
   );
 }

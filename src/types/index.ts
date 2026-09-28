@@ -54,6 +54,8 @@ export interface StudentUser {
   name: string;
   phone?: string;
   verifiedAt?: string;
+  deviceId?: string;
+  imageUrl?: string;
 }
 
 export interface Order {
@@ -105,4 +107,5 @@ export interface SiteSettings {
   smtpPass?: string;
   smtpSenderEmail?: string;
   googleClientId?: string;
+  clerkPublishableKey?: string;
 }
