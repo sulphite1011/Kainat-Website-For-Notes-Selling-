@@ -86,6 +86,30 @@ export const ClerkAuthProvider: React.FC<ClerkAuthProviderProps> = ({ children, 
 
   const isConfigured = Boolean(publishableKey && publishableKey.trim().startsWith('pk_'));
 
+  useEffect(() => {
+    const checkKey = () => {
+      try {
+        const stored = localStorage.getItem('kainat_clerk_pub_key');
+        if (stored && stored.trim().startsWith('pk_') && stored.trim() !== publishableKey) {
+          setPublishableKey(stored.trim());
+          return;
+        }
+        const settings = getStoredSettings();
+        if (settings.clerkPublishableKey && settings.clerkPublishableKey.trim().startsWith('pk_') && settings.clerkPublishableKey.trim() !== publishableKey) {
+          setPublishableKey(settings.clerkPublishableKey.trim());
+        }
+      } catch {
+        // ignore
+      }
+    };
+    window.addEventListener('storage', checkKey);
+    const interval = setInterval(checkKey, 1500);
+    return () => {
+      window.removeEventListener('storage', checkKey);
+      clearInterval(interval);
+    };
+  }, [publishableKey]);
+
   const saveKey = async (newKey: string) => {
     const trimmed = newKey.trim();
     setPublishableKey(trimmed);

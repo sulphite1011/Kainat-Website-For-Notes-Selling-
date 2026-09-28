@@ -1083,15 +1083,15 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
             className={`pb-2.5 px-2.5 sm:px-3 text-xs font-semibold border-b-2 transition-colors whitespace-nowrap shrink-0 flex items-center gap-1.5 ${
               activeTab === 'email-auth'
                 ? isLight
-                  ? 'border-emerald-600 text-emerald-800 font-bold'
-                  : 'border-emerald-500 text-emerald-400'
+                  ? 'border-purple-600 text-purple-800 font-bold'
+                  : 'border-purple-500 text-purple-400'
                 : isLight
                   ? 'border-transparent text-slate-600 hover:text-slate-900'
                   : 'border-transparent text-zinc-400 hover:text-zinc-200'
             }`}
           >
-            <Mail className="w-3.5 h-3.5 shrink-0" />
-            <span>Email (SMTP) & Google Auth</span>
+            <ShieldCheck className="w-3.5 h-3.5 shrink-0" />
+            <span>Clerk & Google Login</span>
           </button>
 
           <button
@@ -2236,7 +2236,7 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
             </div>
           )}
 
-          {/* TAB: EMAIL (SMTP) & GOOGLE AUTHENTICATION SETUP */}
+          {/* TAB: CLERK & GOOGLE AUTHENTICATION SETUP */}
           {activeTab === 'email-auth' && (
             <div className="space-y-4 sm:space-y-6 max-w-3xl mx-auto">
               {/* Header Box */}
@@ -2244,221 +2244,217 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
                 isLight ? 'bg-white border-slate-200 shadow-xs' : 'bg-zinc-950 border-zinc-800'
               }`}>
                 <div className="flex items-center gap-2">
-                  <Mail className="w-5 h-5 text-emerald-600" />
-                  <h3 className={`text-sm font-bold ${isLight ? 'text-slate-900' : 'text-white'}`}>
-                    Real-Time Email Verification (SMTP) & Google Sign-In Setup
-                  </h3>
+                  <div className="p-2 rounded-xl bg-purple-500/10 text-purple-400 border border-purple-500/20">
+                    <ShieldCheck className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <h3 className={`text-sm font-bold ${isLight ? 'text-slate-900' : 'text-white'}`}>
+                      Clerk Authentication (1-Click Google & Gmail Login)
+                    </h3>
+                    <p className="text-[11px] text-purple-400 font-medium">
+                      Primary Student Authentication Method
+                    </p>
+                  </div>
                 </div>
                 <p className={`text-xs leading-relaxed ${isLight ? 'text-slate-600' : 'text-zinc-400'}`}>
-                  Configure your Gmail SMTP credentials so that when a student enters their Gmail address during checkout or login, a real 6-digit verification code is instantly delivered to their Gmail inbox in real time! You can also configure official 3rd-party Google Sign-In.
+                  Student authentication is powered by <strong>Clerk</strong>. Students can log in instantly with 1-click using their Google / Gmail account from any phone, laptop, or tablet with zero passwords or OTP codes required!
                 </p>
               </div>
 
-              {/* Live Status Card */}
+              {/* Live Connection Status Card */}
               <div className={`p-4 rounded-xl border flex items-center justify-between gap-3 ${
-                smtpPassInput.trim()
-                  ? isLight ? 'bg-emerald-50 border-emerald-200 text-emerald-900' : 'bg-emerald-950/40 border-emerald-800 text-emerald-300'
+                clerkPublishableKeyInput.trim().startsWith('pk_')
+                  ? isLight ? 'bg-purple-50 border-purple-200 text-purple-900' : 'bg-purple-950/40 border-purple-800 text-purple-300'
                   : isLight ? 'bg-amber-50 border-amber-200 text-amber-900' : 'bg-amber-950/40 border-amber-800 text-amber-300'
               }`}>
                 <div className="flex items-center gap-2.5">
-                  <div className={`w-3 h-3 rounded-full shrink-0 ${smtpPassInput.trim() ? 'bg-emerald-500 animate-pulse' : 'bg-amber-500'}`} />
+                  <div className={`w-3 h-3 rounded-full shrink-0 ${clerkPublishableKeyInput.trim().startsWith('pk_') ? 'bg-emerald-500 animate-pulse' : 'bg-amber-500'}`} />
                   <div>
                     <div className="text-xs font-bold">
-                      {smtpPassInput.trim() ? 'SMTP Server Active & Configured' : 'SMTP Server Not Yet Configured'}
+                      {clerkPublishableKeyInput.trim().startsWith('pk_')
+                        ? 'Clerk Google Login Active & Ready for Students'
+                        : 'Clerk Publishable Key Required'}
                     </div>
                     <div className="text-[11px] opacity-80">
-                      {smtpPassInput.trim()
-                        ? `Outgoing emails dispatched via ${smtpUserInput || 'your Gmail'} (Port ${smtpPortInput})`
-                        : 'Add your Google App Password below so student verification codes send directly to their inboxes.'}
+                      {clerkPublishableKeyInput.trim().startsWith('pk_')
+                        ? 'Students can sign in instantly with their Google / Gmail accounts.'
+                        : 'Paste your Clerk Publishable Key below to activate 1-click Google login for all students.'}
                     </div>
                   </div>
                 </div>
 
-                <button
-                  type="button"
-                  onClick={handleTestSmtp}
-                  disabled={isTestingSmtp || !smtpPassInput.trim()}
-                  className="px-3.5 py-1.5 rounded-lg text-xs font-semibold bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white transition-colors flex items-center gap-1.5 shrink-0"
+                <a
+                  href="https://dashboard.clerk.com"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="px-3.5 py-1.5 rounded-lg text-xs font-semibold bg-purple-600 hover:bg-purple-500 text-white transition-colors flex items-center gap-1.5 shrink-0"
                 >
-                  <RefreshCw className={`w-3 h-3 ${isTestingSmtp ? 'animate-spin' : ''}`} />
-                  <span>{isTestingSmtp ? 'Sending Test...' : 'Send Test Email'}</span>
-                </button>
+                  <span>Clerk Dashboard</span>
+                  <ExternalLink className="w-3 h-3" />
+                </a>
               </div>
 
-              {smtpTestResult && (
-                <div className={`p-3.5 rounded-xl border text-xs flex items-center gap-2 ${
-                  smtpTestResult.success
-                    ? isLight ? 'bg-emerald-50 border-emerald-200 text-emerald-800' : 'bg-emerald-950/60 border-emerald-800 text-emerald-300'
-                    : isLight ? 'bg-rose-50 border-rose-200 text-rose-800' : 'bg-rose-950/60 border-rose-800 text-rose-300'
-                }`}>
-                  {smtpTestResult.success ? (
-                    <CheckCircle2 className="w-4 h-4 shrink-0 text-emerald-500" />
-                  ) : (
-                    <XCircle className="w-4 h-4 shrink-0 text-rose-500" />
-                  )}
-                  <span>{smtpTestResult.message}</span>
-                </div>
-              )}
-
-              {/* 1. Gmail SMTP Credentials Form */}
+              {/* Clerk Publishable Key Configuration Form */}
               <div className={`p-4 sm:p-5 rounded-xl border space-y-4 ${
                 isLight ? 'bg-white border-slate-200 shadow-xs' : 'bg-zinc-950/60 border-zinc-800'
               }`}>
                 <div className="flex items-center justify-between border-b pb-2">
                   <h4 className={`text-xs font-bold uppercase tracking-wider ${isLight ? 'text-slate-800' : 'text-zinc-200'}`}>
-                    1. Gmail / SMTP Dispatch Credentials
+                    Clerk Credentials
                   </h4>
-                  <span className="text-[11px] text-emerald-600 font-mono">100% Free with Google</span>
+                  <span className="text-[11px] text-purple-400 font-mono">1-Click Google Sign-In</span>
                 </div>
 
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  <div className="space-y-1">
-                    <label className={`text-xs font-semibold ${isLight ? 'text-slate-700' : 'text-zinc-300'}`}>
-                      SMTP Host
-                    </label>
-                    <input
-                      type="text"
-                      value={smtpHostInput}
-                      onChange={(e) => setSmtpHostInput(e.target.value)}
-                      placeholder="smtp.gmail.com"
-                      className={`w-full rounded-lg px-3 py-2 text-xs font-mono focus:outline-none focus:ring-1 focus:ring-emerald-500 ${
-                        isLight ? 'bg-slate-50 border border-slate-300 text-slate-900' : 'bg-zinc-900 border border-zinc-800 text-white'
-                      }`}
-                    />
-                  </div>
-
-                  <div className="space-y-1">
-                    <label className={`text-xs font-semibold ${isLight ? 'text-slate-700' : 'text-zinc-300'}`}>
-                      SMTP Port (465 for SSL, 587 for TLS)
-                    </label>
-                    <input
-                      type="number"
-                      value={smtpPortInput}
-                      onChange={(e) => setSmtpPortInput(Number(e.target.value) || 465)}
-                      placeholder="465"
-                      className={`w-full rounded-lg px-3 py-2 text-xs font-mono focus:outline-none focus:ring-1 focus:ring-emerald-500 ${
-                        isLight ? 'bg-slate-50 border border-slate-300 text-slate-900' : 'bg-zinc-900 border border-zinc-800 text-white'
-                      }`}
-                    />
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  <div className="space-y-1">
-                    <label className={`text-xs font-semibold ${isLight ? 'text-slate-700' : 'text-zinc-300'}`}>
-                      Sender Gmail / Username *
-                    </label>
-                    <input
-                      type="email"
-                      value={smtpUserInput}
-                      onChange={(e) => setSmtpUserInput(e.target.value)}
-                      placeholder="ka8984510@gmail.com"
-                      className={`w-full rounded-lg px-3 py-2 text-xs font-mono focus:outline-none focus:ring-1 focus:ring-emerald-500 ${
-                        isLight ? 'bg-slate-50 border border-slate-300 text-slate-900' : 'bg-zinc-900 border border-zinc-800 text-white'
-                      }`}
-                    />
-                  </div>
-
-                  <div className="space-y-1">
-                    <label className={`text-xs font-semibold ${isLight ? 'text-slate-700' : 'text-zinc-300'}`}>
-                      Google 16-Letter App Password *
-                    </label>
-                    <input
-                      type="password"
-                      value={smtpPassInput}
-                      onChange={(e) => setSmtpPassInput(e.target.value)}
-                      placeholder="e.g. abcd efgh ijkl mnop"
-                      className={`w-full rounded-lg px-3 py-2 text-xs font-mono focus:outline-none focus:ring-1 focus:ring-emerald-500 ${
-                        isLight ? 'bg-slate-50 border border-slate-300 text-slate-900' : 'bg-zinc-900 border border-zinc-800 text-white'
-                      }`}
-                    />
-                  </div>
-                </div>
-
-                {/* Instructions on how to get free Google App Password */}
-                <div className={`p-3.5 rounded-xl border text-xs space-y-1.5 ${
-                  isLight ? 'bg-slate-50 border-slate-200 text-slate-700' : 'bg-zinc-900 border-zinc-800 text-zinc-300'
-                }`}>
-                  <div className="font-bold text-emerald-600 flex items-center gap-1.5">
-                    <span>🔑 How to generate your free Google App Password in 1 minute:</span>
-                  </div>
-                  <ol className="list-decimal pl-4 space-y-1 text-[11px] text-zinc-400">
-                    <li>Go to your Google Account: <a href="https://myaccount.google.com/security" target="_blank" rel="noopener noreferrer" className="text-emerald-500 hover:underline">myaccount.google.com/security</a></li>
-                    <li>Make sure <strong>2-Step Verification</strong> is switched <strong>ON</strong>.</li>
-                    <li>In the search box at top, type <strong>"App passwords"</strong> and select it.</li>
-                    <li>Enter App Name as <strong>Kainat Notes Hub</strong> and click <strong>Create</strong>.</li>
-                    <li>Copy the 16-letter code and paste it into the <em>Google 16-Letter App Password</em> box above!</li>
-                  </ol>
-                </div>
-              </div>
-
-              {/* 2. Official Clerk Authentication (1-Click Google & Gmail Login) */}
-              <div className={`p-4 sm:p-5 rounded-xl border space-y-4 ${
-                isLight ? 'bg-white border-slate-200 shadow-xs' : 'bg-zinc-950/60 border-zinc-800'
-              }`}>
-                <div className="flex items-center justify-between border-b pb-2">
-                  <div className="flex items-center gap-2">
-                    <h4 className={`text-xs font-bold uppercase tracking-wider ${isLight ? 'text-slate-800' : 'text-zinc-200'}`}>
-                      2. Clerk Authentication (1-Click Google & Gmail Login)
-                    </h4>
-                    <span className="text-[10px] px-2 py-0.5 rounded-full font-bold bg-purple-500/10 text-purple-400 border border-purple-500/20">
-                      Recommended
-                    </span>
-                  </div>
-                  <div className="flex items-center gap-1.5 text-[11px]">
-                    <div className={`w-2 h-2 rounded-full ${clerkPublishableKeyInput.trim().startsWith('pk_') ? 'bg-emerald-500 animate-pulse' : 'bg-amber-500'}`} />
-                    <span className={clerkPublishableKeyInput.trim().startsWith('pk_') ? 'text-emerald-400 font-semibold' : 'text-amber-400'}>
-                      {clerkPublishableKeyInput.trim().startsWith('pk_') ? 'Clerk Active' : 'Key Needed'}
-                    </span>
-                  </div>
-                </div>
-
-                <div className="space-y-1.5">
+                <div className="space-y-2">
                   <div className="flex items-center justify-between">
                     <label className={`text-xs font-semibold ${isLight ? 'text-slate-700' : 'text-zinc-300'}`}>
-                      Clerk Publishable Key (<code className="font-mono text-[11px] text-emerald-400">pk_test_...</code> or <code className="font-mono text-[11px] text-emerald-400">pk_live_...</code>)
+                      Clerk Publishable Key (<code className="font-mono text-[11px] text-purple-400">pk_test_...</code> or <code className="font-mono text-[11px] text-purple-400">pk_live_...</code>)
                     </label>
-                    <a
-                      href="https://dashboard.clerk.com"
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="text-[11px] text-purple-400 hover:text-purple-300 hover:underline flex items-center gap-1"
-                    >
-                      <span>Open Clerk Dashboard</span>
-                      <ExternalLink className="w-2.5 h-2.5" />
-                    </a>
                   </div>
                   <input
                     type="text"
                     value={clerkPublishableKeyInput}
                     onChange={(e) => setClerkPublishableKeyInput(e.target.value)}
                     placeholder="pk_test_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
-                    className={`w-full rounded-lg px-3 py-2 text-xs font-mono focus:outline-none focus:ring-1 focus:ring-purple-500 ${
+                    className={`w-full rounded-lg px-3 py-2.5 text-xs font-mono focus:outline-none focus:ring-1 focus:ring-purple-500 ${
                       isLight ? 'bg-slate-50 border border-slate-300 text-slate-900' : 'bg-zinc-900 border border-zinc-800 text-white'
                     }`}
                   />
                   <p className="text-[11px] text-zinc-500">
-                    Paste your Clerk Publishable Key from <a href="https://dashboard.clerk.com" target="_blank" rel="noopener noreferrer" className="text-purple-400 hover:underline">dashboard.clerk.com</a> &gt; <strong>API Keys</strong>. With Clerk, students sign in with 1-click using their Google account with zero passwords or OTP codes required!
+                    Get this key from your Clerk dashboard: <strong>dashboard.clerk.com &gt; API Keys</strong>.
                   </p>
                 </div>
+
+                {/* Save Button */}
+                <button
+                  type="button"
+                  onClick={handleSaveSettings}
+                  disabled={isSavingSettings}
+                  className="w-full py-3 px-4 bg-purple-600 hover:bg-purple-500 text-white rounded-xl text-xs font-bold shadow-lg shadow-purple-950/40 transition-all flex items-center justify-center gap-2 active:scale-95 cursor-pointer"
+                >
+                  {isSavingSettings ? (
+                    <>
+                      <RefreshCw className="w-4 h-4 animate-spin" />
+                      <span>Saving Clerk Authentication...</span>
+                    </>
+                  ) : (
+                    <span>Save & Activate Clerk Google Login</span>
+                  )}
+                </button>
               </div>
 
-              {/* Save Button */}
-              <button
-                type="button"
-                onClick={handleSaveSettings}
-                disabled={isSavingSettings}
-                className="w-full py-3 px-4 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs font-bold shadow-lg shadow-emerald-950/40 transition-all flex items-center justify-center gap-2 active:scale-95 cursor-pointer"
-              >
-                {isSavingSettings ? (
-                  <>
-                    <RefreshCw className="w-4 h-4 animate-spin" />
-                    <span>Saving Email & Clerk Auth Credentials...</span>
-                  </>
-                ) : (
-                  <span>Save Email (SMTP) & Clerk Auth Settings</span>
-                )}
-              </button>
+              {/* 3-Step Setup Guide */}
+              <div className={`p-4 sm:p-5 rounded-xl border space-y-3 ${
+                isLight ? 'bg-slate-50 border-slate-200 text-slate-800' : 'bg-zinc-900/60 border-zinc-800 text-zinc-200'
+              }`}>
+                <h4 className="text-xs font-bold text-purple-400 uppercase tracking-wider flex items-center gap-1.5">
+                  <Sparkles className="w-3.5 h-3.5" />
+                  Quick 3-Step Clerk Setup Guide
+                </h4>
+                <ol className="text-xs text-zinc-400 space-y-2 pl-4 list-decimal marker:text-purple-400">
+                  <li>
+                    <strong className="text-white">Log in to Clerk:</strong> Open{' '}
+                    <a href="https://dashboard.clerk.com" target="_blank" rel="noopener noreferrer" className="text-purple-400 hover:underline inline-flex items-center gap-0.5">
+                      dashboard.clerk.com <ExternalLink className="w-2.5 h-2.5" />
+                    </a>{' '}
+                    and create or select your application.
+                  </li>
+                  <li>
+                    <strong className="text-white">Enable Google Login:</strong> In your Clerk dashboard sidebar, go to{' '}
+                    <strong className="text-zinc-300">User & Authentication &gt; Social Connections</strong> and verify that{' '}
+                    <strong className="text-emerald-400">Google</strong> is toggled <strong>ON</strong>.
+                  </li>
+                  <li>
+                    <strong className="text-white">Copy Publishable Key:</strong> Go to{' '}
+                    <strong className="text-zinc-300">API Keys</strong> in the sidebar, copy your{' '}
+                    <code className="text-purple-400 font-mono text-[11px]">Publishable Key</code> (starts with <code className="text-purple-400">pk_test_</code> or <code className="text-purple-400">pk_live_</code>), and paste it into the box above!
+                  </li>
+                </ol>
+              </div>
+
+              {/* Collapsible Optional Section: Outgoing Store Emails (SMTP for receipts) */}
+              <details className={`p-4 rounded-xl border text-xs space-y-3 ${
+                isLight ? 'bg-white border-slate-200' : 'bg-zinc-950/40 border-zinc-800/80'
+              }`}>
+                <summary className="font-semibold text-zinc-400 cursor-pointer hover:text-zinc-200 flex items-center justify-between">
+                  <span>Optional: Store Outgoing Email (Gmail SMTP for Purchase Receipts)</span>
+                  <span className="text-[10px] text-zinc-500">Receipt Delivery Only</span>
+                </summary>
+
+                <div className="pt-3 space-y-4 border-t border-zinc-800/60 mt-3">
+                  <p className="text-[11px] text-zinc-400">
+                    Configure this if you want the system to email payment receipts and delivery links to students when their order is approved. <em>(Student login is handled exclusively by Clerk above).</em>
+                  </p>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div className="space-y-1">
+                      <label className="text-[11px] text-zinc-400">SMTP Host</label>
+                      <input
+                        type="text"
+                        value={smtpHostInput}
+                        onChange={(e) => setSmtpHostInput(e.target.value)}
+                        placeholder="smtp.gmail.com"
+                        className="w-full rounded-lg px-2.5 py-1.5 text-xs bg-zinc-900 border border-zinc-800 text-white font-mono"
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <label className="text-[11px] text-zinc-400">SMTP Port</label>
+                      <input
+                        type="number"
+                        value={smtpPortInput}
+                        onChange={(e) => setSmtpPortInput(Number(e.target.value) || 465)}
+                        className="w-full rounded-lg px-2.5 py-1.5 text-xs bg-zinc-900 border border-zinc-800 text-white font-mono"
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <label className="text-[11px] text-zinc-400">Sender Gmail</label>
+                      <input
+                        type="email"
+                        value={smtpUserInput}
+                        onChange={(e) => setSmtpUserInput(e.target.value)}
+                        placeholder="ka8984510@gmail.com"
+                        className="w-full rounded-lg px-2.5 py-1.5 text-xs bg-zinc-900 border border-zinc-800 text-white font-mono"
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <label className="text-[11px] text-zinc-400">Google 16-Letter App Password</label>
+                      <input
+                        type="password"
+                        value={smtpPassInput}
+                        onChange={(e) => setSmtpPassInput(e.target.value)}
+                        placeholder="e.g. abcd efgh ijkl mnop"
+                        className="w-full rounded-lg px-2.5 py-1.5 text-xs bg-zinc-900 border border-zinc-800 text-white font-mono"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="flex gap-2">
+                    <button
+                      type="button"
+                      onClick={handleTestSmtp}
+                      disabled={isTestingSmtp || !smtpPassInput.trim()}
+                      className="py-1.5 px-3 rounded-lg text-xs bg-zinc-800 hover:bg-zinc-700 text-zinc-200 transition-colors flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+                    >
+                      <RefreshCw className={`w-3 h-3 ${isTestingSmtp ? 'animate-spin' : ''}`} />
+                      <span>{isTestingSmtp ? 'Sending Test...' : 'Test SMTP Dispatch'}</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleSaveSettings}
+                      disabled={isSavingSettings}
+                      className="py-1.5 px-3 rounded-lg text-xs bg-emerald-600 hover:bg-emerald-500 text-white font-bold transition-colors cursor-pointer"
+                    >
+                      <span>Save SMTP</span>
+                    </button>
+                  </div>
+
+                  {smtpTestResult && (
+                    <p className={`text-xs ${smtpTestResult.success ? 'text-emerald-400' : 'text-rose-400'}`}>
+                      {smtpTestResult.message}
+                    </p>
+                  )}
+                </div>
+              </details>
             </div>
           )}
 
