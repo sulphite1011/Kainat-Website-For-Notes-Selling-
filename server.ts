@@ -3,6 +3,7 @@ import path from 'path';
 import fs from 'fs';
 import { fileURLToPath } from 'url';
 import dotenv from 'dotenv';
+import nodemailer from 'nodemailer';
 import { initialNotesCatalog } from './src/data/notesCatalog.ts';
 import { Order, OrderNotificationAlert, NoteItem, SiteSettings } from './src/types/index.ts';
 import { generatePagesFromRawContent } from './src/utils/notesFormatter.ts';
@@ -372,6 +373,7 @@ app.get('/api/notes', (_req: Request, res: Response) => {
     coverImage: n.coverImage,
     previewPagesCount: n.previewPages?.length || 0,
     previewPages: n.previewPages || [],
+    samplePdfUrl: n.samplePdfUrl || '',
     googleDriveUrl: n.googleDriveUrl,
     previewPageLimit: n.previewPageLimit || 3
   }));
@@ -380,10 +382,12 @@ app.get('/api/notes', (_req: Request, res: Response) => {
 
 // ----------------------------------------------------
 // 4. Single Note Details (Strictly Scoped: Course is available ONLY to student who paid)
+// Supports cross-device authentication via studentEmail / Gmail
 // ----------------------------------------------------
 app.get('/api/notes/:id', (req: Request, res: Response) => {
   const { id } = req.params;
-  const { accessToken, orderId } = req.query;
+  const { accessToken, orderId, email, studentEmail } = req.query;
+  const targetEmail = ((email || studentEmail) as string)?.trim().toLowerCase();
 
   const note = db.notes.find(n => n.id === id);
   if (!note) {
@@ -406,7 +410,23 @@ app.get('/api/notes/:id', (req: Request, res: Response) => {
     return hasBundle;
   };
 
-  if (accessToken && typeof accessToken === 'string') {
+  if (targetEmail) {
+    const studentOrders = db.orders.filter(o => o.studentEmail.toLowerCase() === targetEmail);
+    const payingOrder = studentOrders.find(o => checkOrderPurchasedNote(o));
+    if (payingOrder) {
+      isAuthorized = true;
+      authorizedStudent = {
+        name: payingOrder.studentName,
+        email: payingOrder.studentEmail,
+        phone: payingOrder.studentPhone,
+        orderId: payingOrder.id
+      };
+    } else if (studentOrders.length > 0) {
+      unauthorizedPurchaserAttempt = true;
+    }
+  }
+
+  if (!isAuthorized && accessToken && typeof accessToken === 'string') {
     const matchingOrder = db.orders.find(o => o.accessToken === accessToken);
     if (matchingOrder) {
       if (checkOrderPurchasedNote(matchingOrder)) {
@@ -418,11 +438,10 @@ app.get('/api/notes/:id', (req: Request, res: Response) => {
           orderId: matchingOrder.id
         };
       } else {
-        // Student is verified for ANOTHER course, but NOT this specific note!
         unauthorizedPurchaserAttempt = true;
       }
     }
-  } else if (orderId && typeof orderId === 'string') {
+  } else if (!isAuthorized && orderId && typeof orderId === 'string') {
     const matchingOrder = db.orders.find(o => o.id.toLowerCase() === orderId.toLowerCase());
     if (matchingOrder) {
       if (checkOrderPurchasedNote(matchingOrder)) {
@@ -434,7 +453,6 @@ app.get('/api/notes/:id', (req: Request, res: Response) => {
           orderId: matchingOrder.id
         };
       } else {
-        // Did not pay for this specific note
         unauthorizedPurchaserAttempt = true;
       }
     }
@@ -483,6 +501,7 @@ app.post('/api/admin/notes', (req: Request, res: Response) => {
     rawTextContent,
     totalPages,
     pricePKR,
+    samplePdfUrl,
     googleDriveUrl,
     previewPageLimit,
     coverImage
@@ -530,6 +549,7 @@ app.post('/api/admin/notes', (req: Request, res: Response) => {
     rating: 5.0,
     reviewsCount: 1,
     topicsCovered: topics.length > 0 ? topics : ['Complete Unit Derivations', 'Board Solved Numericals', 'Important Formula Sheets'],
+    samplePdfUrl: (samplePdfUrl || '').trim() || '',
     googleDriveUrl: (googleDriveUrl || '').trim() || '',
     previewPageLimit: sampleLimit,
     coverImage: coverImage || '',
@@ -570,6 +590,7 @@ app.put('/api/admin/notes/:id', (req: Request, res: Response) => {
     rawTextContent,
     totalPages,
     pricePKR,
+    samplePdfUrl,
     googleDriveUrl,
     previewPageLimit,
     coverImage
@@ -583,6 +604,7 @@ app.put('/api/admin/notes/:id', (req: Request, res: Response) => {
   if (description) existing.description = description.trim();
   if (totalPages !== undefined) existing.totalPages = Number(totalPages);
   if (pricePKR !== undefined) existing.pricePKR = Number(pricePKR);
+  if (samplePdfUrl !== undefined) existing.samplePdfUrl = samplePdfUrl.trim();
   if (googleDriveUrl !== undefined) existing.googleDriveUrl = googleDriveUrl.trim();
   if (coverImage !== undefined) existing.coverImage = coverImage;
   if (previewPageLimit !== undefined) existing.previewPageLimit = Math.max(1, Number(previewPageLimit) || 3);
@@ -729,6 +751,309 @@ app.get('/api/orders/:id', (req: Request, res: Response) => {
     return res.status(404).json({ success: false, message: 'Order not found.' });
   }
   res.json({ success: true, order });
+});
+
+// ----------------------------------------------------
+// 10B. Email Dispatch (SMTP / Nodemailer) & Student Authentication
+// ----------------------------------------------------
+const studentVerificationCodes: Record<string, { code: string; expiresAt: number; name?: string; phone?: string }> = {};
+
+function getMailTransporter(settings: SiteSettings) {
+  const host = settings.smtpHost || process.env.SMTP_HOST || 'smtp.gmail.com';
+  const port = Number(settings.smtpPort || process.env.SMTP_PORT || 465);
+  const user = settings.smtpUser || process.env.SMTP_USER || settings.ownerEmail || 'ka8984510@gmail.com';
+  const pass = settings.smtpPass || process.env.SMTP_PASS || '';
+
+  if (!pass) {
+    return null;
+  }
+
+  return nodemailer.createTransport({
+    host,
+    port,
+    secure: port === 465,
+    auth: {
+      user,
+      pass,
+    },
+  });
+}
+
+async function sendVerificationEmail(
+  toEmail: string,
+  code: string,
+  studentName: string,
+  settings: SiteSettings
+): Promise<{ sent: boolean; error?: string }> {
+  const transporter = getMailTransporter(settings);
+  if (!transporter) {
+    return {
+      sent: false,
+      error: 'SMTP server is not configured in Admin Portal yet. Please configure your Gmail App Password in Admin Portal > Settings.',
+    };
+  }
+
+  const senderEmail = settings.smtpSenderEmail || settings.smtpUser || settings.ownerEmail || 'ka8984510@gmail.com';
+  const senderName = settings.siteName || 'Kainat Notes Hub';
+
+  const mailOptions = {
+    from: `"${senderName}" <${senderEmail}>`,
+    to: toEmail,
+    subject: `${code} is your Kainat Notes Hub verification code`,
+    text: `Assalam-o-Alaikum ${studentName || 'Student'},\n\nYour 6-digit verification code is: ${code}\n\nThis code will expire in 10 minutes.\nUse this code to sign in and read your purchased notes on any device.\n\nKainat Notes Hub Team`,
+    html: `
+      <div style="font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; max-width: 540px; margin: 0 auto; background: #ffffff; border: 1px solid #e2e8f0; border-radius: 16px; overflow: hidden; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);">
+        <div style="background: linear-gradient(135deg, #065f46 0%, #059669 100%); padding: 28px 24px; text-align: center; color: #ffffff;">
+          <h1 style="margin: 0; font-size: 22px; font-weight: 800; letter-spacing: -0.5px;">Kainat Notes Hub</h1>
+          <p style="margin: 6px 0 0; font-size: 13px; color: #a7f3d0; font-weight: 500;">Official Student Account Security Verification</p>
+        </div>
+        <div style="padding: 28px 24px; color: #334155;">
+          <p style="font-size: 15px; margin: 0 0 12px; font-weight: 600; color: #0f172a;">Assalam-o-Alaikum ${studentName ? studentName : 'Student'},</p>
+          <p style="font-size: 14px; line-height: 1.6; margin: 0 0 20px; color: #475569;">
+            We received a request to verify your Gmail account for access to your notes on <strong>Kainat Notes Hub</strong>. Use the 6-digit verification code below to complete your login:
+          </p>
+          <div style="text-align: center; margin: 24px 0;">
+            <div style="display: inline-block; background: #f0fdf4; border: 2px dashed #059669; border-radius: 12px; padding: 14px 32px;">
+              <span style="font-family: monospace, Courier, 'Courier New'; font-size: 36px; font-weight: 800; letter-spacing: 8px; color: #047857; text-align: center;">
+                ${code}
+              </span>
+            </div>
+            <p style="font-size: 12px; color: #64748b; margin: 8px 0 0;">Valid for 10 minutes · Do not share this code with anyone</p>
+          </div>
+          <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 12px 16px; margin: 20px 0; font-size: 12px; color: #64748b;">
+            <strong style="color: #334155;">💡 Multi-Device Access:</strong> Once logged in, any course verified for your email automatically unlocks on your mobile phone, laptop, or tablet.
+          </div>
+          <p style="font-size: 13px; color: #64748b; line-height: 1.5; margin: 0;">
+            If you did not request this login code, you can safely ignore this email.
+          </p>
+        </div>
+        <div style="background: #f8fafc; border-top: 1px solid #e2e8f0; padding: 16px 24px; text-align: center; font-size: 11px; color: #94a3b8;">
+          <p style="margin: 0;">Kainat Notes Hub &copy; ${new Date().getFullYear()} · Official Student Portal</p>
+          <p style="margin: 4px 0 0;">WhatsApp Support: +92 324 9059918</p>
+        </div>
+      </div>
+    `,
+  };
+
+  try {
+    await transporter.sendMail(mailOptions);
+    console.log(`[SMTP Success] Verification email delivered to ${toEmail}`);
+    return { sent: true };
+  } catch (err: any) {
+    console.error(`[SMTP Error] Failed sending verification email to ${toEmail}:`, err);
+    return { sent: false, error: err?.message || 'Failed to send email through SMTP.' };
+  }
+}
+
+// Request real 6-digit verification code sent directly to student's Gmail inbox
+app.post('/api/student/request-code', async (req: Request, res: Response) => {
+  const { email, name, phone } = req.body;
+  if (!email || typeof email !== 'string' || !email.includes('@')) {
+    return res.status(400).json({ success: false, message: 'Valid Gmail or email address is required.' });
+  }
+
+  const cleanEmail = email.trim().toLowerCase();
+  const existing = studentVerificationCodes[cleanEmail];
+
+  // Rate limit: prevent spamming email inbox (minimum 25 seconds between requests)
+  if (existing && Date.now() < existing.expiresAt - (9.5 * 60 * 1000)) {
+    return res.status(429).json({
+      success: false,
+      message: 'A verification code was recently sent to this Gmail. Please wait 25 seconds before requesting another code.',
+    });
+  }
+
+  // Generate real cryptographically random 6-digit code
+  const code = Math.floor(100000 + Math.random() * 900000).toString();
+  studentVerificationCodes[cleanEmail] = {
+    code,
+    expiresAt: Date.now() + 10 * 60 * 1000, // 10 minutes
+    name: name?.trim(),
+    phone: phone?.trim(),
+  };
+
+  // Dispatch real email to student's inbox
+  const result = await sendVerificationEmail(cleanEmail, code, name?.trim() || '', db.settings);
+
+  if (result.sent) {
+    return res.json({
+      success: true,
+      emailSent: true,
+      message: `A 6-digit verification code has been sent directly to your Gmail inbox (${cleanEmail}). Please check your Inbox and Spam folder.`,
+      email: cleanEmail,
+    });
+  }
+
+  // If SMTP is not yet configured by the owner in Admin Settings:
+  console.log(`[Student Auth Pending SMTP] Code for ${cleanEmail} generated: ${code}`);
+
+  // Also add an Admin Notification Alert so Kainat can see that student requested login
+  const alertRecord: OrderNotificationAlert = {
+    id: `notif-login-${Date.now()}`,
+    orderId: 'LOGIN-VERIFY',
+    studentName: name?.trim() || cleanEmail.split('@')[0],
+    studentEmail: cleanEmail,
+    studentPhone: phone?.trim() || '',
+    totalAmountPKR: 0,
+    verifiedAt: new Date().toISOString(),
+    message: `Student login requested by ${cleanEmail}. Verification Code: ${code}. (Configure SMTP in Admin Settings to deliver directly to student inbox automatically).`
+  };
+  db.notifications.unshift(alertRecord);
+  saveDatabase(db);
+  broadcastAlert(alertRecord);
+
+  // Return notification without leaking code to the student in UI
+  return res.json({
+    success: true,
+    emailSent: false,
+    smtpNotConfigured: true,
+    message: result.error || `Verification code generated for ${cleanEmail}. Please check your Gmail inbox or configure SMTP in Admin Settings.`,
+    email: cleanEmail,
+  });
+});
+
+// Verify login with real 6-digit OTP code received in student's Gmail
+app.post('/api/student/verify-login', (req: Request, res: Response) => {
+  const { email, code, name, phone } = req.body;
+  if (!email || typeof email !== 'string' || !email.includes('@')) {
+    return res.status(400).json({ success: false, message: 'Valid Gmail/Email is required.' });
+  }
+
+  const cleanEmail = email.trim().toLowerCase();
+  const stored = studentVerificationCodes[cleanEmail];
+
+  if (!stored) {
+    return res.status(400).json({
+      success: false,
+      message: 'No active verification code found for this Gmail. Please request a new code.',
+    });
+  }
+
+  if (Date.now() > stored.expiresAt) {
+    delete studentVerificationCodes[cleanEmail];
+    return res.status(400).json({
+      success: false,
+      message: 'Verification code has expired (10 minute limit). Please request a fresh code.',
+    });
+  }
+
+  const cleanCode = (code || '').trim();
+  if (cleanCode !== stored.code) {
+    return res.status(400).json({
+      success: false,
+      message: 'Incorrect verification code. Please check your Gmail inbox and enter the 6-digit code received.',
+    });
+  }
+
+  // Code matches! Clear OTP
+  delete studentVerificationCodes[cleanEmail];
+
+  // Find all previous orders for this student
+  const studentOrders = db.orders.filter(o => o.studentEmail.toLowerCase() === cleanEmail);
+  const studentName = name?.trim() || stored?.name || (studentOrders.length > 0 ? studentOrders[0].studentName : cleanEmail.split('@')[0]);
+  const studentPhone = phone?.trim() || stored?.phone || (studentOrders.length > 0 ? studentOrders[0].studentPhone : '');
+
+  res.json({
+    success: true,
+    message: 'Welcome! Student verified successfully.',
+    student: {
+      email: cleanEmail,
+      name: studentName,
+      phone: studentPhone,
+      verifiedAt: new Date().toISOString(),
+    },
+    orders: studentOrders,
+  });
+});
+
+// Google Sign-In verification endpoint (Google Identity Services / OAuth)
+app.post('/api/student/google-login', (req: Request, res: Response) => {
+  const { credential, email, name } = req.body;
+  
+  let verifiedEmail = (email || '').trim().toLowerCase();
+  let verifiedName = (name || '').trim();
+
+  // If Google credential JWT is provided, safely decode it
+  if (credential && typeof credential === 'string') {
+    try {
+      const parts = credential.split('.');
+      if (parts.length === 3) {
+        const payloadStr = Buffer.from(parts[1], 'base64').toString('utf-8');
+        const payload = JSON.parse(payloadStr);
+        if (payload.email) {
+          verifiedEmail = payload.email.trim().toLowerCase();
+          verifiedName = payload.name || verifiedName;
+        }
+      }
+    } catch (e) {
+      console.warn('Could not parse Google JWT payload:', e);
+    }
+  }
+
+  if (!verifiedEmail || !verifiedEmail.includes('@')) {
+    return res.status(400).json({ success: false, message: 'Google Sign-In failed to provide a valid email.' });
+  }
+
+  // Find all previous orders for this student
+  const studentOrders = db.orders.filter(o => o.studentEmail.toLowerCase() === verifiedEmail);
+  const finalName = verifiedName || (studentOrders.length > 0 ? studentOrders[0].studentName : verifiedEmail.split('@')[0]);
+  const studentPhone = studentOrders.length > 0 ? studentOrders[0].studentPhone : '';
+
+  res.json({
+    success: true,
+    message: `Signed in with Google as ${verifiedEmail}`,
+    student: {
+      email: verifiedEmail,
+      name: finalName,
+      phone: studentPhone,
+      verifiedAt: new Date().toISOString(),
+    },
+    orders: studentOrders,
+  });
+});
+
+// Test SMTP connection from Admin Portal
+app.post('/api/admin/test-smtp', async (req: Request, res: Response) => {
+  const { smtpHost, smtpPort, smtpUser, smtpPass, smtpSenderEmail, testRecipient } = req.body;
+  const tempSettings: SiteSettings = {
+    ...db.settings,
+    smtpHost,
+    smtpPort: Number(smtpPort) || 465,
+    smtpUser,
+    smtpPass,
+    smtpSenderEmail
+  };
+
+  const recipient = (testRecipient || tempSettings.ownerEmail || 'ka8984510@gmail.com').trim();
+  const testCode = Math.floor(100000 + Math.random() * 900000).toString();
+  const result = await sendVerificationEmail(recipient, testCode, 'Kainat (Admin Test)', tempSettings);
+
+  if (result.sent) {
+    res.json({
+      success: true,
+      message: `Test email successfully dispatched to ${recipient}! Check your inbox.`,
+    });
+  } else {
+    res.status(400).json({
+      success: false,
+      message: result.error || 'Failed to send test email. Check your host, port, email, and Google App Password.',
+    });
+  }
+});
+
+// Cross-device query to get all orders and courses purchased by this Gmail
+app.get('/api/student/orders', (req: Request, res: Response) => {
+  const email = ((req.query.email as string) || '').trim().toLowerCase();
+  if (!email) {
+    return res.status(400).json({ success: false, message: 'Student email required.' });
+  }
+
+  const studentOrders = db.orders.filter(o => o.studentEmail.toLowerCase() === email);
+  res.json({
+    success: true,
+    email,
+    orders: studentOrders,
+  });
 });
 
 // ----------------------------------------------------

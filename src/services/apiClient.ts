@@ -1,4 +1,4 @@
-import { NoteItem, Order, OrderNotificationAlert, SiteSettings } from '../types';
+import { NoteItem, Order, OrderNotificationAlert, SiteSettings, StudentUser } from '../types';
 import { initialNotesCatalog } from '../data/notesCatalog';
 import { seedNotes, seedOrders, seedNotifications, seedSettings } from '../data/seedData';
 import { generatePagesFromRawContent } from '../utils/notesFormatter';
@@ -281,6 +281,8 @@ export async function apiSaveNote(noteData: Partial<NoteItem>, editNoteId?: stri
         ...currentNotes[existingIndex],
         ...noteData,
         id: editNoteId,
+        samplePdfUrl: noteData.samplePdfUrl !== undefined ? noteData.samplePdfUrl : currentNotes[existingIndex].samplePdfUrl || '',
+        googleDriveUrl: noteData.googleDriveUrl !== undefined ? noteData.googleDriveUrl : currentNotes[existingIndex].googleDriveUrl || '',
         previewPageLimit: sampleLimit,
         previewPages: previewSlices,
         fullContentPages: (noteData as any).rawTextContent ? generatedPages : currentNotes[existingIndex].fullContentPages || generatedPages,
@@ -292,6 +294,8 @@ export async function apiSaveNote(noteData: Partial<NoteItem>, editNoteId?: stri
         rating: 5.0,
         reviewsCount: 1,
         ...noteData,
+        samplePdfUrl: noteData.samplePdfUrl || '',
+        googleDriveUrl: noteData.googleDriveUrl || '',
         previewPageLimit: sampleLimit,
         previewPages: previewSlices,
         fullContentPages: generatedPages,
@@ -331,6 +335,7 @@ export async function apiSaveNote(noteData: Partial<NoteItem>, editNoteId?: stri
         : (Number(noteData.totalPages) || generatedPages.length || 20),
       pricePKR: Number(noteData.pricePKR) || 199,
       topicsCovered: topics,
+      samplePdfUrl: noteData.samplePdfUrl || '',
       googleDriveUrl: noteData.googleDriveUrl || '',
       previewPageLimit: sampleLimit,
       coverImage: noteData.coverImage || '/images/matric_notes_cover_1790249191068.jpg',
@@ -796,3 +801,204 @@ export async function apiRestoreDatabaseBackup(jsonData: any): Promise<{ success
     stats: { notes: jsonData.notes.length, orders: jsonData.orders?.length || 0 },
   };
 }
+
+// ----------------------------------------------------
+// Student Authentication & Cross-Device Sync Helpers
+// ----------------------------------------------------
+const STUDENT_AUTH_KEY = 'kainat_student_auth';
+
+export function getStoredStudent(): StudentUser | null {
+  try {
+    const raw = localStorage.getItem(STUDENT_AUTH_KEY);
+    return raw ? JSON.parse(raw) : null;
+  } catch {
+    return null;
+  }
+}
+
+export function saveStoredStudent(student: StudentUser | null): void {
+  try {
+    if (student) {
+      localStorage.setItem(STUDENT_AUTH_KEY, JSON.stringify(student));
+    } else {
+      localStorage.removeItem(STUDENT_AUTH_KEY);
+    }
+  } catch {
+    // ignore
+  }
+}
+
+export async function apiStudentRequestCode(
+  email: string,
+  name?: string,
+  phone?: string
+): Promise<{ success: boolean; message: string; emailSent?: boolean; smtpNotConfigured?: boolean }> {
+  try {
+    const res = await safeFetchJson<{
+      success: boolean;
+      message: string;
+      emailSent?: boolean;
+      smtpNotConfigured?: boolean;
+    }>('/api/student/request-code', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email, name, phone }),
+    });
+    if (res.ok && res.data) return res.data;
+    if (res.data?.message) {
+      return { success: false, message: res.data.message };
+    }
+  } catch {
+    // ignore
+  }
+  return {
+    success: true,
+    emailSent: false,
+    message: `Verification request initiated for ${email}. Please check your Gmail inbox or configure SMTP in Admin Settings.`,
+  };
+}
+
+export async function apiStudentVerifyLogin(
+  email: string,
+  code: string,
+  name?: string,
+  phone?: string
+): Promise<{ success: boolean; message: string; student?: StudentUser; orders?: Order[] }> {
+  const cleanEmail = email.trim().toLowerCase();
+  const cleanCode = (code || '').trim();
+
+  if (!cleanCode) {
+    return { success: false, message: 'Please enter the 6-digit verification code from your Gmail inbox.' };
+  }
+
+  try {
+    const res = await safeFetchJson<{
+      success: boolean;
+      message: string;
+      student: StudentUser;
+      orders: Order[];
+    }>('/api/student/verify-login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email: cleanEmail, code: cleanCode, name, phone }),
+    });
+
+    if (res.ok && res.data && res.data.success) {
+      saveStoredStudent(res.data.student);
+      if (res.data.orders && res.data.orders.length > 0) {
+        const stored = getStoredOrders();
+        const mergedMap = new Map<string, Order>();
+        [...res.data.orders, ...stored].forEach((o) => mergedMap.set(o.id, o));
+        saveStoredOrders(Array.from(mergedMap.values()));
+      }
+      return res.data;
+    } else if (res.data?.message) {
+      return { success: false, message: res.data.message };
+    }
+  } catch {
+    // fallback
+  }
+
+  return {
+    success: false,
+    message: 'Could not verify code. Please make sure you entered the exact 6 digits sent to your Gmail inbox.',
+  };
+}
+
+export async function apiStudentGoogleLogin(
+  credential?: string,
+  profile?: { email: string; name?: string; picture?: string }
+): Promise<{ success: boolean; message: string; student?: StudentUser; orders?: Order[] }> {
+  try {
+    const res = await safeFetchJson<{
+      success: boolean;
+      message: string;
+      student: StudentUser;
+      orders: Order[];
+    }>('/api/student/google-login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        credential,
+        email: profile?.email,
+        name: profile?.name,
+        picture: profile?.picture,
+      }),
+    });
+
+    if (res.ok && res.data && res.data.success) {
+      saveStoredStudent(res.data.student);
+      if (res.data.orders && res.data.orders.length > 0) {
+        const stored = getStoredOrders();
+        const mergedMap = new Map<string, Order>();
+        [...res.data.orders, ...stored].forEach((o) => mergedMap.set(o.id, o));
+        saveStoredOrders(Array.from(mergedMap.values()));
+      }
+      return res.data;
+    }
+  } catch {
+    // fallback
+  }
+
+  if (profile?.email) {
+    const fallbackStudent: StudentUser = {
+      email: profile.email.trim().toLowerCase(),
+      name: profile.name?.trim() || profile.email.split('@')[0],
+      verifiedAt: new Date().toISOString(),
+    };
+    saveStoredStudent(fallbackStudent);
+    const matchedOrders = getStoredOrders().filter(
+      (o) => o.studentEmail.toLowerCase() === fallbackStudent.email.toLowerCase()
+    );
+    return {
+      success: true,
+      message: `Signed in as ${fallbackStudent.email}`,
+      student: fallbackStudent,
+      orders: matchedOrders,
+    };
+  }
+
+  return { success: false, message: 'Google Sign-In was cancelled or failed.' };
+}
+
+export async function apiTestSmtp(config: {
+  smtpHost?: string;
+  smtpPort?: number;
+  smtpUser?: string;
+  smtpPass?: string;
+  smtpSenderEmail?: string;
+  testRecipient?: string;
+}): Promise<{ success: boolean; message: string }> {
+  try {
+    const res = await safeFetchJson<{ success: boolean; message: string }>('/api/admin/test-smtp', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(config),
+    });
+    if (res.data) return res.data;
+  } catch (err: any) {
+    return { success: false, message: err?.message || 'Failed connecting to server.' };
+  }
+  return { success: false, message: 'Server did not respond to SMTP test.' };
+}
+
+export async function apiGetStudentOrders(email: string): Promise<Order[]> {
+  const clean = email.trim().toLowerCase();
+  try {
+    const res = await safeFetchJson<{ success: boolean; orders: Order[] }>(
+      `/api/student/orders?email=${encodeURIComponent(clean)}`
+    );
+    if (res.ok && res.data?.success && Array.isArray(res.data.orders)) {
+      const stored = getStoredOrders();
+      const mergedMap = new Map<string, Order>();
+      [...res.data.orders, ...stored].forEach((o) => mergedMap.set(o.id, o));
+      const merged = Array.from(mergedMap.values());
+      saveStoredOrders(merged);
+      return res.data.orders;
+    }
+  } catch {
+    // fallback
+  }
+  return getStoredOrders().filter((o) => o.studentEmail.toLowerCase() === clean);
+}
+

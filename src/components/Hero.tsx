@@ -36,28 +36,40 @@ export const Hero: React.FC<HeroProps> = ({ onSelectCategory, onOpenTrack }) => 
             </p>
 
             {/* Quick Segmented Selectors */}
-            <div className="flex flex-wrap items-center gap-3 pt-2">
+            <div className="flex flex-wrap items-center gap-2 pt-2">
               <button
                 onClick={() => onSelectCategory('Matric-9th')}
-                className="px-4 py-2 text-xs font-semibold text-zinc-200 bg-zinc-800/80 hover:bg-zinc-700/80 border border-zinc-700/50 rounded-lg transition-colors"
+                className="px-3.5 py-1.5 text-xs font-semibold text-zinc-200 bg-zinc-800/80 hover:bg-zinc-700/80 border border-zinc-700/50 rounded-lg transition-colors"
               >
-                9th & 10th Matric
+                Matric 9th
+              </button>
+              <button
+                onClick={() => onSelectCategory('Matric-10th')}
+                className="px-3.5 py-1.5 text-xs font-semibold text-zinc-200 bg-zinc-800/80 hover:bg-zinc-700/80 border border-zinc-700/50 rounded-lg transition-colors"
+              >
+                Matric 10th
               </button>
               <button
                 onClick={() => onSelectCategory('FSc-Part1')}
-                className="px-4 py-2 text-xs font-semibold text-zinc-200 bg-zinc-800/80 hover:bg-zinc-700/80 border border-zinc-700/50 rounded-lg transition-colors"
+                className="px-3.5 py-1.5 text-xs font-semibold text-zinc-200 bg-zinc-800/80 hover:bg-zinc-700/80 border border-zinc-700/50 rounded-lg transition-colors"
               >
-                FSc Pre-Eng & Pre-Med
+                FSc Part-1 (11th)
+              </button>
+              <button
+                onClick={() => onSelectCategory('FSc-Part2')}
+                className="px-3.5 py-1.5 text-xs font-semibold text-zinc-200 bg-zinc-800/80 hover:bg-zinc-700/80 border border-zinc-700/50 rounded-lg transition-colors"
+              >
+                FSc Part-2 (12th)
               </button>
               <button
                 onClick={() => onSelectCategory('BSc-Year1')}
-                className="px-4 py-2 text-xs font-semibold text-zinc-200 bg-zinc-800/80 hover:bg-zinc-700/80 border border-zinc-700/50 rounded-lg transition-colors"
+                className="px-3.5 py-1.5 text-xs font-semibold text-zinc-200 bg-zinc-800/80 hover:bg-zinc-700/80 border border-zinc-700/50 rounded-lg transition-colors"
               >
                 BSc Higher Sciences
               </button>
               <button
                 onClick={onOpenTrack}
-                className="px-4 py-2 text-xs font-semibold text-emerald-300 hover:text-emerald-200 bg-emerald-950/40 hover:bg-emerald-950/60 border border-emerald-800/40 rounded-lg transition-colors"
+                className="px-3.5 py-1.5 text-xs font-semibold text-emerald-300 hover:text-emerald-200 bg-emerald-950/40 hover:bg-emerald-950/60 border border-emerald-800/40 rounded-lg transition-colors"
               >
                 Check My Order Status
               </button>

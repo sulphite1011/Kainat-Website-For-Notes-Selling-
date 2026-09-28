@@ -1,13 +1,15 @@
-import React, { useState } from 'react';
-import { NoteItem, Order } from '../types';
-import { X, Copy, Check, Smartphone, Upload, Send, ArrowRight, CheckCircle2 } from 'lucide-react';
-import { apiUploadImage, apiCreateOrder } from '../services/apiClient';
+import React, { useState, useEffect } from 'react';
+import { NoteItem, Order, StudentUser } from '../types';
+import { X, Copy, Check, Smartphone, Upload, Send, ArrowRight, CheckCircle2, ShieldCheck, Mail } from 'lucide-react';
+import { apiUploadImage, apiCreateOrder, saveStoredStudent } from '../services/apiClient';
 
 interface CheckoutModalProps {
   cartNotes: NoteItem[];
   onRemoveFromCart: (id: string) => void;
   onClose: () => void;
   onOrderCreated: (order: Order) => void;
+  currentStudent?: StudentUser | null;
+  onStudentAuthenticated?: (student: StudentUser) => void;
   easyPaisaAccount?: string;
   whatsAppNumber?: string;
 }
@@ -17,13 +19,23 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
   onRemoveFromCart,
   onClose,
   onOrderCreated,
+  currentStudent,
+  onStudentAuthenticated,
   easyPaisaAccount = '03415892099',
   whatsAppNumber = '0324 9059918',
 }) => {
-  const [studentName, setStudentName] = useState('');
-  const [studentEmail, setStudentEmail] = useState('');
-  const [studentPhone, setStudentPhone] = useState('');
+  const [studentName, setStudentName] = useState(currentStudent?.name || '');
+  const [studentEmail, setStudentEmail] = useState(currentStudent?.email || '');
+  const [studentPhone, setStudentPhone] = useState(currentStudent?.phone || '');
   const [trxId, setTrxId] = useState('');
+
+  useEffect(() => {
+    if (currentStudent) {
+      if (currentStudent.email && !studentEmail) setStudentEmail(currentStudent.email);
+      if (currentStudent.name && !studentName) setStudentName(currentStudent.name);
+      if (currentStudent.phone && !studentPhone) setStudentPhone(currentStudent.phone);
+    }
+  }, [currentStudent]);
   const [screenshotPreview, setScreenshotPreview] = useState<string>('');
   const [copied, setCopied] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -104,6 +116,20 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
       const waUrl = `https://api.whatsapp.com/send?phone=${formattedWhatsAppPhone}&text=${encodeURIComponent(
         `Assalam-o-Alaikum Kainat! I have placed Order #${data.order.id} on Kainat Notes Hub.%0A%0AStudent Name: ${data.order.studentName}%0AEmail: ${data.order.studentEmail}%0AEasyPaisa Trx ID: ${data.order.trxId}%0ATotal Amount: Rs. ${data.order.totalAmountPKR}%0A%0ACourses Ordered:%0A${notesListText}%0A%0APlease verify my payment and unlock my notes.`
       )}`;
+
+      // Auto-register and sync this student user across devices
+      if (studentEmail.trim()) {
+        const studentObj: StudentUser = {
+          email: studentEmail.trim().toLowerCase(),
+          name: studentName.trim(),
+          phone: studentPhone.trim(),
+          verifiedAt: new Date().toISOString(),
+        };
+        saveStoredStudent(studentObj);
+        if (onStudentAuthenticated) {
+          onStudentAuthenticated(studentObj);
+        }
+      }
 
       setSubmittedOrder(data.order);
       setWhatsappUrl(waUrl);
@@ -272,8 +298,25 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
 
               {/* Step 2: Form Inputs */}
               <div className="space-y-4">
-                <div className="text-xs font-bold text-zinc-300 uppercase tracking-wide">
-                  Step 2: Enter Student Verification Details
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-bold text-zinc-300 uppercase tracking-wide">
+                    Step 2: Enter Student Verification Details
+                  </span>
+                  <span className="text-[11px] text-emerald-400 font-semibold flex items-center gap-1">
+                    <ShieldCheck className="w-3.5 h-3.5" />
+                    <span>Multi-Device Sync Enabled</span>
+                  </span>
+                </div>
+
+                {/* Cross-Device Gmail Account Notice */}
+                <div className="p-3 bg-zinc-950 border border-zinc-800 rounded-xl flex items-start gap-2.5 text-xs">
+                  <Mail className="w-4 h-4 text-emerald-400 shrink-0 mt-0.5" />
+                  <div className="space-y-0.5">
+                    <div className="text-zinc-200 font-semibold">Cross-Device Permanent Access</div>
+                    <p className="text-[11px] text-zinc-400 leading-relaxed">
+                      Your purchased notes will be permanently linked to your Gmail. You can log into this same Gmail from your phone, laptop, or tablet at any time to read your notes.
+                    </p>
+                  </div>
                 </div>
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -290,7 +333,7 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
                   </div>
 
                   <div className="space-y-1.5">
-                    <label className="text-xs font-medium text-zinc-400">Email Address (For Single-Student License) *</label>
+                    <label className="text-xs font-medium text-zinc-400">Your Gmail Address (For Multi-Device Access) *</label>
                     <input
                       type="email"
                       required

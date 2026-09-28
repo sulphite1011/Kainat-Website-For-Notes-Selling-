@@ -40,12 +40,20 @@ export interface NoteItem {
   rating: number;
   reviewsCount: number;
   topicsCovered: string[];
+  samplePdfUrl?: string;
   googleDriveUrl: string;
   googleDriveFileId?: string;
   previewPageLimit?: number;
   coverImage?: string;
   previewPages?: NotePage[];
   fullContentPages?: NotePage[];
+}
+
+export interface StudentUser {
+  email: string;
+  name: string;
+  phone?: string;
+  verifiedAt?: string;
 }
 
 export interface Order {
@@ -91,4 +99,10 @@ export interface SiteSettings {
   whatsAppNumber: string;
   ownerEmail: string;
   mongoDbUri?: string;
+  smtpHost?: string;
+  smtpPort?: number;
+  smtpUser?: string;
+  smtpPass?: string;
+  smtpSenderEmail?: string;
+  googleClientId?: string;
 }

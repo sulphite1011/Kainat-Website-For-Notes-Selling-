@@ -1,16 +1,15 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { NoteItem } from '../types';
 import {
   X,
-  ChevronLeft,
-  ChevronRight,
   ShoppingCart,
   Lock,
   ShieldCheck,
   FileText,
   ExternalLink,
   BookOpen,
-  ShieldAlert,
+  Sparkles,
+  CheckCircle2,
 } from 'lucide-react';
 import { formatGoogleDrivePreviewUrl, isDriveOrPdfUrl, getDirectDriveViewUrl } from '../utils/driveUrlHelper';
 
@@ -27,85 +26,59 @@ export const NotePreviewModal: React.FC<NotePreviewModalProps> = ({
   onAddToCart,
   isInCart,
 }) => {
-  const [activePageIndex, setActivePageIndex] = useState(0);
-  const [activeTab, setActiveTab] = useState<'sample' | 'pdf'>('sample');
-
-  // Reset tab to 'sample' whenever note changes so pasted online notes always show first
-  useEffect(() => {
-    if (note) {
-      setActivePageIndex(0);
-      const hasSamplePages = (note.previewPages && note.previewPages.length > 0) || (note.fullContentPages && note.fullContentPages.length > 0);
-      setActiveTab(hasSamplePages ? 'sample' : 'pdf');
-    }
-  }, [note]);
+  const [activeTab, setActiveTab] = useState<'demo' | 'locked-info'>('demo');
 
   if (!note) return null;
 
-  // Use fullContentPages length if available, otherwise totalPages or previewPages
-  const totalAvailablePages = Math.max(
-    note.totalPages || 0,
-    note.fullContentPages?.length || 0,
-    note.previewPages?.length || 0,
-    1
-  );
+  // Prefer demo sample PDF link; fallback to googleDriveUrl if not separately set
+  const samplePdfLink = (note.samplePdfUrl && note.samplePdfUrl.trim()) || note.googleDriveUrl || '';
+  const hasSamplePdf = isDriveOrPdfUrl(samplePdfLink);
+  const sampleEmbedUrl = formatGoogleDrivePreviewUrl(samplePdfLink);
+  const directSampleUrl = getDirectDriveViewUrl(samplePdfLink);
 
-  const previewPages = (note.previewPages && note.previewPages.length > 0)
-    ? note.previewPages
-    : (note.fullContentPages && note.fullContentPages.length > 0)
-    ? note.fullContentPages.slice(0, note.previewPageLimit || 3)
-    : [];
-
-  const currentPage = previewPages[activePageIndex];
-  const hasDrivePdf = isDriveOrPdfUrl(note.googleDriveUrl);
-  const driveEmbedUrl = formatGoogleDrivePreviewUrl(note.googleDriveUrl);
-  const directDriveUrl = getDirectDriveViewUrl(note.googleDriveUrl);
-  const freeLimit = note.previewPageLimit || 3;
-
-  // Exact remaining locked count
-  const remainingLockedCount = Math.max(0, totalAvailablePages - previewPages.length);
+  const sampleLimit = note.previewPageLimit || 3;
+  const totalPages = note.totalPages || 24;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/80 backdrop-blur-md animate-in fade-in duration-200">
-      <div className="relative w-full max-w-4xl rounded-2xl border border-zinc-800 bg-zinc-900 shadow-2xl flex flex-col h-[90vh] overflow-hidden">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/85 backdrop-blur-md animate-in fade-in duration-200">
+      <div className="relative w-full max-w-5xl rounded-2xl border border-zinc-800 bg-zinc-900 shadow-2xl flex flex-col h-[90vh] overflow-hidden">
         {/* Header */}
-        <div className="flex items-center justify-between px-4 sm:px-6 py-3.5 border-b border-zinc-800 bg-zinc-950/80 shrink-0">
+        <div className="flex items-center justify-between px-4 sm:px-6 py-3.5 border-b border-zinc-800 bg-zinc-950/90 shrink-0">
           <div className="min-w-0 pr-3">
             <div className="text-xs text-emerald-400 font-semibold tracking-wide flex items-center gap-1.5">
               <ShieldCheck className="w-3.5 h-3.5 shrink-0" />
-              <span>
-                Free Student Sample ({previewPages.length} of {totalAvailablePages} Pages Previewable)
-              </span>
+              <span>Free Demo Notes Sample ({sampleLimit} Pages Free Preview)</span>
             </div>
             <h2 className="text-sm sm:text-base font-bold text-white truncate mt-0.5">{note.title}</h2>
           </div>
 
           <div className="flex items-center gap-2">
-            {/* View Mode Toggle: Interactive Notes Sample vs PDF Document */}
+            {/* Tab switch between Demo Sample Reader & Locked Complete Course Info */}
             <div className="flex items-center bg-zinc-900 p-0.5 rounded-lg border border-zinc-800">
               <button
                 type="button"
-                onClick={() => setActiveTab('sample')}
-                className={`flex items-center gap-1 px-2.5 py-1 rounded-md text-xs font-medium transition-colors ${
-                  activeTab === 'sample'
-                    ? 'bg-emerald-600 text-white font-bold'
+                onClick={() => setActiveTab('demo')}
+                className={`flex items-center gap-1.5 px-3 py-1 rounded-md text-xs font-semibold transition-colors ${
+                  activeTab === 'demo'
+                    ? 'bg-emerald-600 text-white shadow-sm'
                     : 'text-zinc-400 hover:text-white'
                 }`}
               >
-                <FileText className="w-3 h-3" />
-                <span>Sample Notes ({previewPages.length})</span>
+                <FileText className="w-3.5 h-3.5" />
+                <span>Demo Sample PDF</span>
               </button>
 
               <button
                 type="button"
-                onClick={() => setActiveTab('pdf')}
-                className={`flex items-center gap-1 px-2.5 py-1 rounded-md text-xs font-medium transition-colors ${
-                  activeTab === 'pdf'
-                    ? 'bg-emerald-600 text-white font-bold'
+                onClick={() => setActiveTab('locked-info')}
+                className={`flex items-center gap-1.5 px-3 py-1 rounded-md text-xs font-semibold transition-colors ${
+                  activeTab === 'locked-info'
+                    ? 'bg-amber-600 text-white shadow-sm'
                     : 'text-zinc-400 hover:text-white'
                 }`}
               >
-                <BookOpen className="w-3 h-3" />
-                <span>PDF Document</span>
+                <Lock className="w-3.5 h-3.5" />
+                <span>Full Notes (Locked)</span>
               </button>
             </div>
 
@@ -119,185 +92,116 @@ export const NotePreviewModal: React.FC<NotePreviewModalProps> = ({
           </div>
         </div>
 
-        {/* Content Area */}
-        <div className="relative flex-1 overflow-hidden bg-zinc-950/50 flex flex-col">
-          {/* TAB 1: Digital Interactive Sample */}
-          {activeTab === 'sample' && (
-            <div className="relative flex-1 overflow-y-auto p-4 sm:p-6">
-              {/* Faint preview diagonal watermark */}
-              <div className="pointer-events-none absolute inset-0 flex items-center justify-center select-none opacity-5">
-                <div className="text-6xl font-black text-white rotate-[-30deg]">
-                  FREE PREVIEW SAMPLE
-                </div>
+        {/* Content Body */}
+        <div className="relative flex-1 overflow-hidden bg-zinc-950 flex flex-col">
+          {/* TAB 1: DEMO SAMPLE PDF VIEWER */}
+          {activeTab === 'demo' && (
+            <div className="relative flex-1 w-full h-full flex flex-col">
+              {/* Notice Bar */}
+              <div className="px-4 py-2 bg-emerald-950/40 border-b border-emerald-900/40 flex flex-wrap items-center justify-between gap-2 text-xs text-emerald-200">
+                <span className="flex items-center gap-1.5 font-medium">
+                  <Sparkles className="w-3.5 h-3.5 text-emerald-400" />
+                  <span>
+                    Viewing free sample pages ({sampleLimit} demo pages). Complete {totalPages}-page course unlocks upon purchase.
+                  </span>
+                </span>
+
+                {hasSamplePdf && directSampleUrl && (
+                  <a
+                    href={directSampleUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex items-center gap-1 text-[11px] text-emerald-400 hover:text-emerald-300 font-semibold hover:underline ml-auto"
+                  >
+                    <span>Open in Fullscreen Tab</span>
+                    <ExternalLink className="w-3 h-3" />
+                  </a>
+                )}
               </div>
 
-              {currentPage ? (
-                <div className="relative z-10 max-w-2xl mx-auto space-y-6 bg-zinc-900/90 border border-zinc-800/80 rounded-xl p-5 sm:p-6 shadow-md select-none">
-                  {/* Page Header */}
-                  <div className="border-b border-zinc-800 pb-3 flex items-center justify-between">
-                    <div>
-                      <span className="text-xs text-emerald-400 font-mono">
-                        Sample Page {currentPage.pageNumber || activePageIndex + 1} of {previewPages.length} (Free {freeLimit}-Page Limit)
-                      </span>
-                      <h3 className="text-base sm:text-lg font-bold text-white mt-0.5">{currentPage.title}</h3>
-                      <div className="text-xs text-zinc-400 mt-0.5">{currentPage.section}</div>
-                    </div>
-                    <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-emerald-950 text-emerald-400 border border-emerald-800">
-                      Sample Page
-                    </span>
+              {hasSamplePdf && sampleEmbedUrl ? (
+                <div className="relative flex-1 w-full h-full flex flex-col bg-zinc-900">
+                  <iframe
+                    src={sampleEmbedUrl}
+                    title={`${note.title} - Sample PDF`}
+                    className="w-full flex-1 border-0 bg-zinc-900"
+                    allow="autoplay"
+                    sandbox="allow-scripts allow-same-origin allow-popups"
+                  />
+
+                  {/* Fallback bar if third party cookies are blocked by browser */}
+                  <div className="px-4 py-1.5 bg-zinc-950 border-t border-zinc-800 text-[11px] text-zinc-400 flex items-center justify-between shrink-0">
+                    <span>If the PDF preview box appears blank (Google cookie restriction):</span>
+                    <a
+                      href={directSampleUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-emerald-400 font-semibold hover:underline flex items-center gap-1"
+                    >
+                      <span>Click here to launch direct Google Drive sample viewer</span>
+                      <ExternalLink className="w-3 h-3" />
+                    </a>
                   </div>
-
-                  {/* Core Notes Key Takeaways */}
-                  {currentPage.keyPoints && currentPage.keyPoints.length > 0 && (
-                    <div className="space-y-2">
-                      <div className="text-xs font-semibold text-emerald-300 uppercase tracking-wide">
-                        Key Highlights & Definitions:
-                      </div>
-                      <ul className="space-y-1.5 text-xs text-zinc-200">
-                        {currentPage.keyPoints.map((pt, idx) => (
-                          <li key={idx} className="flex items-start gap-2">
-                            <span className="text-emerald-400 font-bold shrink-0">•</span>
-                            <span>{pt}</span>
-                          </li>
-                        ))}
-                      </ul>
-                    </div>
-                  )}
-
-                  {/* Formulas if present */}
-                  {currentPage.formulas && currentPage.formulas.length > 0 && (
-                    <div className="p-3 rounded-lg bg-zinc-950 border border-zinc-800 space-y-1">
-                      <div className="text-[11px] font-semibold text-teal-400 uppercase tracking-wide">
-                        Governing Formulas:
-                      </div>
-                      <div className="text-xs font-mono text-zinc-200 space-y-1">
-                        {currentPage.formulas.map((f, i) => (
-                          <div key={i} className="bg-zinc-900/80 px-2 py-1 rounded border border-zinc-800/60">
-                            {f}
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Solved Board Questions */}
-                  {currentPage.boardQuestions && currentPage.boardQuestions.length > 0 && (
-                    <div className="p-3 rounded-lg bg-amber-950/20 border border-amber-900/40 space-y-1">
-                      <div className="text-[11px] font-semibold text-amber-300 uppercase tracking-wide">
-                        Board Exam Highlighted Questions:
-                      </div>
-                      <ul className="text-xs text-amber-100/90 space-y-1">
-                        {currentPage.boardQuestions.map((q, i) => (
-                          <li key={i} className="flex items-start gap-1.5">
-                            <span className="text-amber-400 font-bold">★</span>
-                            <span>{q}</span>
-                          </li>
-                        ))}
-                      </ul>
-                    </div>
-                  )}
-
-                  {/* Rendered HTML excerpt */}
-                  {currentPage.contentHtml && (
-                    <div
-                      className="text-xs text-zinc-300 leading-relaxed border-t border-zinc-800 pt-3"
-                      dangerouslySetInnerHTML={{ __html: currentPage.contentHtml }}
-                    />
-                  )}
-
-                  {/* Teaser for remaining pages */}
-                  {remainingLockedCount > 0 ? (
-                    <div className="mt-6 p-4 rounded-xl border border-dashed border-zinc-800 bg-zinc-950/80 text-center space-y-2">
-                      <Lock className="w-5 h-5 text-emerald-400 mx-auto" />
-                      <div className="text-xs font-semibold text-zinc-200">
-                        {remainingLockedCount} More Comprehensive Pages Locked
-                      </div>
-                      <p className="text-[11px] text-zinc-400">
-                        To protect Kainat's proprietary notes, complete derivations, numericals, and full PDF access unlock exclusively upon verified payment.
-                      </p>
-                    </div>
-                  ) : (
-                    <div className="mt-6 p-3.5 rounded-xl border border-emerald-800/40 bg-emerald-950/20 text-center space-y-1">
-                      <ShieldCheck className="w-5 h-5 text-emerald-400 mx-auto" />
-                      <div className="text-xs font-semibold text-emerald-300">
-                        All {totalAvailablePages} Pages Available Upon Verification
-                      </div>
-                      <p className="text-[11px] text-zinc-400">
-                        Instant unlock inside the interactive reader once verified with EasyPaisa.
-                      </p>
-                    </div>
-                  )}
                 </div>
               ) : (
-                <div className="text-center py-12 text-zinc-400 space-y-2">
-                  <FileText className="w-10 h-10 mx-auto text-zinc-600" />
-                  <p className="text-xs">Digital page excerpts are being formatted.</p>
-                  <button
-                    type="button"
-                    onClick={() => setActiveTab('pdf')}
-                    className="px-3 py-1.5 rounded-lg bg-emerald-600 text-white text-xs font-semibold"
-                  >
-                    Switch to PDF Document Tab
-                  </button>
+                <div className="flex-1 flex flex-col items-center justify-center p-6 text-center space-y-4 max-w-md mx-auto">
+                  <div className="w-14 h-14 rounded-2xl bg-emerald-500/10 border border-emerald-500/30 flex items-center justify-center text-emerald-400">
+                    <BookOpen className="w-7 h-7" />
+                  </div>
+                  <div className="space-y-1">
+                    <h3 className="text-base font-bold text-white">Demo Sample PDF Ready</h3>
+                    <p className="text-xs text-zinc-400 leading-relaxed">
+                      Mam Kainat has prepared authentic demo sample pages for this course. Add your Google Drive sample PDF link in the Admin portal to preview directly inside this window.
+                    </p>
+                  </div>
                 </div>
               )}
             </div>
           )}
 
-          {/* TAB 2: Protected PDF Notice & Secure Vault (Guards Google Drive from Free Downloading) */}
-          {activeTab === 'pdf' && (
-            <div className="relative flex-1 w-full h-full flex flex-col bg-zinc-950">
-              <div className="flex-1 flex flex-col items-center justify-center p-6 sm:p-8 text-center max-w-lg mx-auto space-y-4">
-                <div className="relative">
-                  <div className="w-16 h-16 rounded-2xl bg-amber-500/10 border border-amber-500/30 flex items-center justify-center text-amber-400 shadow-xl shadow-amber-950/20">
-                    <Lock className="w-8 h-8" />
-                  </div>
-                  <div className="absolute -bottom-1 -right-1 p-1 bg-red-600 rounded-full text-white">
-                    <ShieldAlert className="w-3.5 h-3.5" />
-                  </div>
+          {/* TAB 2: LOCKED COMPLETE PDF SECTION */}
+          {activeTab === 'locked-info' && (
+            <div className="relative flex-1 w-full h-full overflow-y-auto p-6 flex flex-col items-center justify-center text-center">
+              <div className="max-w-xl w-full space-y-5 bg-zinc-900/90 border border-zinc-800 rounded-2xl p-6 sm:p-8 shadow-2xl">
+                <div className="w-16 h-16 rounded-2xl bg-amber-500/10 border border-amber-500/30 flex items-center justify-center text-amber-400 mx-auto shadow-lg shadow-amber-950/40">
+                  <Lock className="w-8 h-8" />
                 </div>
 
                 <div className="space-y-2">
                   <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-amber-950/60 border border-amber-800/80 text-[11px] font-bold text-amber-300">
-                    <span>PDF Protected from Unauthorized Download</span>
+                    <span>Full Notes PDF Strictly Locked</span>
                   </div>
-                  <h3 className="text-base sm:text-lg font-bold text-white">
-                    Full PDF & Google Drive Access Restricted
-                  </h3>
+                  <h3 className="text-xl font-bold text-white">{note.title}</h3>
                   <p className="text-xs text-zinc-400 leading-relaxed">
-                    To prevent illegal document downloading and sharing, complete Google Drive files are locked until purchase. 
-                    You can read the first <strong>{freeLimit} sample pages</strong> under the <strong>"Sample Notes"</strong> tab.
+                    The complete course contains all <strong>{totalPages} comprehensive pages</strong> with step-by-step board derivations, solved past papers, formula sheets, and numerical exam keys.
                   </p>
                 </div>
 
-                <div className="w-full bg-zinc-900 border border-zinc-800 rounded-xl p-3.5 text-left space-y-2">
-                  <div className="text-[11px] font-semibold text-zinc-300 uppercase tracking-wide">
-                    What unlocks after EasyPaisa verification:
+                {/* Topics Covered Box */}
+                {note.topicsCovered && note.topicsCovered.length > 0 && (
+                  <div className="bg-zinc-950 border border-zinc-800 rounded-xl p-4 text-left space-y-2">
+                    <div className="text-[11px] font-bold uppercase tracking-wider text-emerald-400">
+                      What Unlocks in the Complete Course:
+                    </div>
+                    <ul className="text-xs text-zinc-300 space-y-1.5">
+                      {note.topicsCovered.map((topic, i) => (
+                        <li key={i} className="flex items-start gap-2">
+                          <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400 shrink-0 mt-0.5" />
+                          <span>{topic}</span>
+                        </li>
+                      ))}
+                    </ul>
                   </div>
-                  <ul className="text-xs text-zinc-400 space-y-1">
-                    <li className="flex items-center gap-2">
-                      <span className="text-emerald-400">✓</span>
-                      <span>Full {totalAvailablePages}-page complete course syllabus</span>
-                    </li>
-                    <li className="flex items-center gap-2">
-                      <span className="text-emerald-400">✓</span>
-                      <span>High-resolution Google Drive PDF streaming</span>
-                    </li>
-                    <li className="flex items-center gap-2">
-                      <span className="text-emerald-400">✓</span>
-                      <span>Protected reader with dynamic watermark security</span>
-                    </li>
-                  </ul>
-                </div>
+                )}
 
-                <div className="flex flex-col sm:flex-row items-center gap-2.5 w-full pt-1">
+                <div className="pt-2 flex flex-col sm:flex-row items-center gap-3">
                   <button
                     type="button"
-                    onClick={() => setActiveTab('sample')}
-                    className="w-full sm:flex-1 px-4 py-2.5 rounded-xl border border-zinc-700 bg-zinc-900 hover:bg-zinc-800 text-xs font-bold text-emerald-400 transition-colors flex items-center justify-center gap-1.5"
+                    onClick={() => setActiveTab('demo')}
+                    className="w-full sm:flex-1 py-2.5 px-4 rounded-xl border border-zinc-700 bg-zinc-800 hover:bg-zinc-700 text-xs font-semibold text-zinc-200 transition-colors flex items-center justify-center gap-1.5"
                   >
                     <FileText className="w-3.5 h-3.5" />
-                    <span>Read Free Sample Pages ({previewPages.length})</span>
+                    <span>Back to Demo Sample</span>
                   </button>
 
                   <button
@@ -306,10 +210,10 @@ export const NotePreviewModal: React.FC<NotePreviewModalProps> = ({
                       onAddToCart(note);
                       onClose();
                     }}
-                    className="w-full sm:flex-1 px-4 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-xs font-bold text-white shadow-lg shadow-emerald-950/50 transition-all flex items-center justify-center gap-1.5"
+                    className="w-full sm:flex-1 py-2.5 px-4 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-xs font-bold text-white shadow-lg shadow-emerald-950/50 transition-all flex items-center justify-center gap-1.5"
                   >
                     <ShoppingCart className="w-3.5 h-3.5" />
-                    <span>Unlock Full PDF (Rs. {note.pricePKR})</span>
+                    <span>Unlock Complete Course (Rs. {note.pricePKR})</span>
                   </button>
                 </div>
               </div>
@@ -319,32 +223,13 @@ export const NotePreviewModal: React.FC<NotePreviewModalProps> = ({
 
         {/* Footer controls */}
         <div className="px-4 sm:px-6 py-3.5 border-t border-zinc-800 bg-zinc-950/90 flex flex-col sm:flex-row items-center justify-between gap-3 shrink-0">
-          {/* Pagination buttons for sample mode */}
-          {activeTab === 'sample' && previewPages.length > 0 ? (
-            <div className="flex items-center gap-2">
-              <button
-                onClick={() => setActivePageIndex((prev) => Math.max(0, prev - 1))}
-                disabled={activePageIndex === 0}
-                className="p-1.5 rounded-lg border border-zinc-800 text-zinc-400 hover:text-white disabled:opacity-40 disabled:cursor-not-allowed"
-              >
-                <ChevronLeft className="w-4 h-4" />
-              </button>
-              <span className="text-xs text-zinc-400 font-mono">
-                Sample Page {activePageIndex + 1} of {previewPages.length} (Limit: {freeLimit})
-              </span>
-              <button
-                onClick={() => setActivePageIndex((prev) => Math.min(previewPages.length - 1, prev + 1))}
-                disabled={activePageIndex >= previewPages.length - 1}
-                className="p-1.5 rounded-lg border border-zinc-800 text-zinc-400 hover:text-white disabled:opacity-40 disabled:cursor-not-allowed"
-              >
-                <ChevronRight className="w-4 h-4" />
-              </button>
-            </div>
-          ) : (
-            <div className="text-xs text-zinc-400">
-              Total {totalAvailablePages} Pages · Curated by Kainat
-            </div>
-          )}
+          <div className="flex items-center gap-2 text-xs text-zinc-400">
+            <span className="font-mono text-emerald-400 font-semibold">{totalPages} Total Pages</span>
+            <span>·</span>
+            <span>Academic Level: {note.classLevel.replace('-', ' ')}</span>
+            <span>·</span>
+            <span>Subject: {note.subject}</span>
+          </div>
 
           {/* Add to Cart CTA */}
           <div className="flex items-center gap-3 w-full sm:w-auto">

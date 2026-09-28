@@ -1,6 +1,7 @@
 import React from 'react';
-import { ShoppingBag, Lock, BookOpen, Sun, Moon } from 'lucide-react';
+import { ShoppingBag, Lock, BookOpen, Sun, Moon, User, UserCheck } from 'lucide-react';
 import { KainatLogo } from './KainatLogo';
+import { StudentUser } from '../types';
 
 interface NavbarProps {
   activeTab: string;
@@ -13,6 +14,8 @@ interface NavbarProps {
   isAdminAuthenticated?: boolean;
   theme?: 'dark' | 'light';
   onToggleTheme?: () => void;
+  currentStudent?: StudentUser | null;
+  openStudentAuth?: () => void;
 }
 
 export const Navbar: React.FC<NavbarProps> = ({
@@ -26,6 +29,8 @@ export const Navbar: React.FC<NavbarProps> = ({
   isAdminAuthenticated,
   theme = 'dark',
   onToggleTheme,
+  currentStudent,
+  openStudentAuth,
 }) => {
   const isLight = theme === 'light';
 
@@ -122,6 +127,32 @@ export const Navbar: React.FC<NavbarProps> = ({
               title={isLight ? 'Switch to Dark Theme' : 'Switch to White Theme'}
             >
               {isLight ? <Moon className="w-4 h-4 text-slate-700" /> : <Sun className="w-4 h-4 text-amber-400" />}
+            </button>
+          )}
+
+          {/* Student Login / Multi-Device Sync Button */}
+          {openStudentAuth && (
+            <button
+              onClick={openStudentAuth}
+              className={`flex items-center gap-1.5 text-xs transition-colors px-2.5 py-2 rounded-lg border ${
+                currentStudent
+                  ? isLight
+                    ? 'border-emerald-300 bg-emerald-50 text-emerald-800 font-semibold'
+                    : 'border-emerald-800 bg-emerald-950/40 text-emerald-300 font-medium'
+                  : isLight
+                    ? 'border-slate-300 hover:border-slate-400 bg-white text-slate-700'
+                    : 'border-zinc-800 hover:border-zinc-700 bg-zinc-900/60 text-zinc-400 hover:text-zinc-200'
+              }`}
+              title={currentStudent ? `Student Account: ${currentStudent.email} (Synced)` : 'Sign in with Gmail for Multi-Device Access'}
+            >
+              {currentStudent ? (
+                <UserCheck className="w-3.5 h-3.5 text-emerald-400" />
+              ) : (
+                <User className="w-3.5 h-3.5 text-zinc-400" />
+              )}
+              <span className="hidden sm:inline">
+                {currentStudent ? currentStudent.name.split(' ')[0] : 'Student Login'}
+              </span>
             </button>
           )}
 

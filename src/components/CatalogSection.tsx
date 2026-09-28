@@ -1,6 +1,6 @@
 import React, { useState, useMemo } from 'react';
 import { NoteItem, ClassLevel, SubjectName } from '../types';
-import { BookOpen, Search, Eye, ShoppingCart, Check, Star, ShieldAlert } from 'lucide-react';
+import { BookOpen, Search, Eye, ShoppingCart, Check, Star, ShieldAlert, Sparkles, Clock, MessageCircle, FileText } from 'lucide-react';
 
 interface CatalogSectionProps {
   notes: NoteItem[];
@@ -150,21 +150,95 @@ export const CatalogSection: React.FC<CatalogSectionProps> = ({
 
       {/* Product Grid */}
       {filteredNotes.length === 0 ? (
-        <div className="text-center py-16 border border-dashed border-zinc-800 rounded-2xl bg-zinc-900/20">
-          <BookOpen className="w-10 h-10 text-zinc-600 mx-auto mb-3" />
-          <p className="text-sm font-medium text-zinc-300">No notes found for this filter criteria</p>
-          <p className="text-xs text-zinc-500 mt-1">Try resetting the class or subject filter</p>
-          <button
-            onClick={() => {
-              setSelectedCategory('All');
-              setSelectedSubject('All');
-              setSearchQuery('');
-            }}
-            className="mt-4 px-3 py-1.5 text-xs text-emerald-400 hover:text-emerald-300 bg-zinc-800 rounded-lg"
-          >
-            Reset Filters
-          </button>
-        </div>
+        selectedCategory !== 'All' && !notes.some((n) => n.classLevel === selectedCategory || (selectedCategory === 'BSc-Year1' && (n.classLevel === 'BSc-Year1' || n.classLevel === 'BSc-Year2'))) ? (
+          <div className="relative overflow-hidden rounded-2xl border border-zinc-800 bg-gradient-to-b from-zinc-900/90 via-zinc-900/50 to-zinc-950 p-8 sm:p-12 text-center shadow-xl">
+            {/* Ambient emerald backlight */}
+            <div className="absolute top-0 left-1/2 -translate-y-1/2 w-96 h-32 bg-emerald-500/10 blur-3xl pointer-events-none rounded-full" />
+
+            <div className="relative z-10 max-w-lg mx-auto space-y-4">
+              <div className="inline-flex items-center gap-2 px-3.5 py-1 rounded-full bg-emerald-950/80 border border-emerald-800/80 text-emerald-300 text-xs font-semibold">
+                <Sparkles className="w-3.5 h-3.5 text-emerald-400" />
+                <span>Class Syllabus in Production</span>
+              </div>
+
+              <div className="w-16 h-16 rounded-2xl bg-zinc-800 border border-zinc-700/80 flex items-center justify-center text-emerald-400 mx-auto shadow-inner">
+                <Clock className="w-8 h-8" />
+              </div>
+
+              <div className="space-y-2">
+                <h3 className="text-xl sm:text-2xl font-extrabold text-white tracking-tight">
+                  {selectedCategory.replace('-', ' ')} Courses Coming Soon! 🚀
+                </h3>
+                <p className="text-xs sm:text-sm text-zinc-400 leading-relaxed">
+                  Mam Kainat is currently handwriting and preparing comprehensive chapter derivations, board solved past papers, formula sheets, and numerical exam keys for <strong>{selectedCategory.replace('-', ' ')}</strong>.
+                </p>
+              </div>
+
+              <div className="p-4 rounded-xl bg-zinc-950/80 border border-zinc-800/80 text-left text-xs text-zinc-300 space-y-2">
+                <div className="font-semibold text-emerald-400 uppercase tracking-wide text-[11px]">
+                  What's being prepared for {selectedCategory.replace('-', ' ')}:
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-zinc-400">
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-emerald-400">✓</span>
+                    <span>All Board Solved Derivations</span>
+                  </div>
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-emerald-400">✓</span>
+                    <span>10-Year Solved Past Papers</span>
+                  </div>
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-emerald-400">✓</span>
+                    <span>Formulas & Short Questions</span>
+                  </div>
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-emerald-400">✓</span>
+                    <span>MCQ Objective Keys</span>
+                  </div>
+                </div>
+              </div>
+
+              <div className="pt-2 flex flex-col sm:flex-row items-center justify-center gap-3">
+                <a
+                  href={`https://wa.me/923249059918?text=${encodeURIComponent(`Hello Mam Kainat! I am waiting for ${selectedCategory.replace('-', ' ')} notes. Please let me know when they are available or if I can pre-order!`)}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="w-full sm:w-auto px-5 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold transition-all shadow-lg shadow-emerald-950/50 flex items-center justify-center gap-2"
+                >
+                  <MessageCircle className="w-4 h-4" />
+                  <span>Notify Me on WhatsApp</span>
+                </a>
+
+                <button
+                  onClick={() => {
+                    setSelectedCategory('All');
+                    setSelectedSubject('All');
+                    setSearchQuery('');
+                  }}
+                  className="w-full sm:w-auto px-5 py-2.5 rounded-xl border border-zinc-700 bg-zinc-800/80 hover:bg-zinc-800 text-zinc-300 text-xs font-semibold transition-colors"
+                >
+                  Browse Available Classes (9th, FSc)
+                </button>
+              </div>
+            </div>
+          </div>
+        ) : (
+          <div className="text-center py-16 border border-dashed border-zinc-800 rounded-2xl bg-zinc-900/20">
+            <BookOpen className="w-10 h-10 text-zinc-600 mx-auto mb-3" />
+            <p className="text-sm font-medium text-zinc-300">No notes found for this filter criteria</p>
+            <p className="text-xs text-zinc-500 mt-1">Try resetting the class or subject filter</p>
+            <button
+              onClick={() => {
+                setSelectedCategory('All');
+                setSelectedSubject('All');
+                setSearchQuery('');
+              }}
+              className="mt-4 px-3 py-1.5 text-xs text-emerald-400 hover:text-emerald-300 bg-zinc-800 rounded-lg"
+            >
+              Reset Filters
+            </button>
+          </div>
+        )
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           {filteredNotes.map((note) => {
@@ -273,10 +347,11 @@ export const CatalogSection: React.FC<CatalogSectionProps> = ({
                   <div className="grid grid-cols-2 gap-2">
                     <button
                       onClick={() => onPreviewNote(note)}
-                      className="flex items-center justify-center gap-1.5 px-3 py-2 text-xs font-medium text-zinc-300 hover:text-white bg-zinc-800/80 hover:bg-zinc-800 rounded-lg border border-zinc-700/60 transition-colors"
+                      className="flex items-center justify-center gap-1.5 px-3 py-2 text-xs font-semibold text-emerald-400 hover:text-emerald-300 bg-emerald-950/40 hover:bg-emerald-950/70 rounded-lg border border-emerald-800/50 transition-colors"
+                      title="Read 3-4 free demo pages from Google Drive"
                     >
-                      <Eye className="w-3.5 h-3.5 text-zinc-400" />
-                      <span>Free Sample</span>
+                      <FileText className="w-3.5 h-3.5" />
+                      <span>Demo Notes (PDF)</span>
                     </button>
 
                     {isUnlocked ? (

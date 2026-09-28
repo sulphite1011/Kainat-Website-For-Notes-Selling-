@@ -4,7 +4,7 @@
  */
 
 import { useState, useEffect, useCallback } from 'react';
-import { NoteItem, Order, SiteSettings } from './types';
+import { NoteItem, Order, SiteSettings, StudentUser } from './types';
 import { Navbar } from './components/Navbar';
 import { Hero } from './components/Hero';
 import { CatalogSection } from './components/CatalogSection';
@@ -13,6 +13,7 @@ import { CheckoutModal } from './components/CheckoutModal';
 import { SecureDocumentViewer } from './components/SecureDocumentViewer';
 import { OrderTracker } from './components/OrderTracker';
 import { StudentLibrary } from './components/StudentLibrary';
+import { StudentAuthModal } from './components/StudentAuthModal';
 import { AdminPortal } from './components/AdminPortal';
 import { RealtimeAlertBanner } from './components/RealtimeAlertBanner';
 import { Footer } from './components/Footer';
@@ -20,6 +21,9 @@ import {
   getStoredNotes,
   getStoredSettings,
   getStoredOrders,
+  getStoredStudent,
+  saveStoredStudent,
+  apiGetStudentOrders,
   apiGetNotes,
   apiGetSettings,
   defaultSettings,
@@ -27,10 +31,15 @@ import {
 
 export default function App() {
   const [activeTab, setActiveTab] = useState<string>('catalog');
+  const [selectedCategory, setSelectedCategory] = useState<string>('All');
   const [notes, setNotes] = useState<NoteItem[]>(getStoredNotes);
   const [cart, setCart] = useState<NoteItem[]>([]);
   const [orders, setOrders] = useState<Order[]>(getStoredOrders);
   const [settings, setSettings] = useState<SiteSettings>(getStoredSettings);
+  const [currentStudent, setCurrentStudent] = useState<StudentUser | null>(getStoredStudent);
+  const [isStudentAuthOpen, setIsStudentAuthOpen] = useState(false);
+  const [pendingCheckoutAfterLogin, setPendingCheckoutAfterLogin] = useState(false);
+
   const [isAdminAuthenticated, setIsAdminAuthenticated] = useState<boolean>(() => {
     try {
       return sessionStorage.getItem('kainat_admin_auth') === 'true';
@@ -83,6 +92,21 @@ export default function App() {
       // ignore
     }
   }, []);
+
+  // Auto-sync orders for logged-in student across devices
+  useEffect(() => {
+    if (currentStudent?.email) {
+      apiGetStudentOrders(currentStudent.email).then((remoteOrders) => {
+        if (remoteOrders && remoteOrders.length > 0) {
+          setOrders((prev) => {
+            const map = new Map<string, Order>();
+            [...remoteOrders, ...prev].forEach((o) => map.set(o.id, o));
+            return Array.from(map.values());
+          });
+        }
+      });
+    }
+  }, [currentStudent]);
 
   // Save cart to localStorage
   useEffect(() => {
@@ -142,7 +166,11 @@ export default function App() {
           }
         }
         if (updatedOrders.length > 0) {
-          setOrders(updatedOrders);
+          setOrders((prev) => {
+            const map = new Map<string, Order>();
+            [...updatedOrders, ...prev].forEach((o) => map.set(o.id, o));
+            return Array.from(map.values());
+          });
         }
       }
     } catch (e) {
@@ -168,12 +196,26 @@ export default function App() {
     }
   };
 
-  // Cart operations
+  // Cart operations: when purchasing, student must sign in via Gmail first so purchase is cross-device
   const handleAddToCart = (note: NoteItem) => {
     if (!cart.some((n) => n.id === note.id)) {
       setCart((prev) => [...prev, note]);
     }
-    setIsCheckoutOpen(true);
+    if (!currentStudent) {
+      setPendingCheckoutAfterLogin(true);
+      setIsStudentAuthOpen(true);
+    } else {
+      setIsCheckoutOpen(true);
+    }
+  };
+
+  const handleOpenCartOrCheckout = () => {
+    if (!currentStudent && cart.length > 0) {
+      setPendingCheckoutAfterLogin(true);
+      setIsStudentAuthOpen(true);
+    } else {
+      setIsCheckoutOpen(true);
+    }
   };
 
   const handleRemoveFromCart = (noteId: string) => {
@@ -215,6 +257,23 @@ export default function App() {
           phone: matchingOrder.studentPhone,
           orderId: matchingOrder.id,
         };
+      } else if (currentStudent?.email) {
+        // Cross-device email verification
+        const studentVerified = orders.find(
+          (o) =>
+            o.status === 'verified' &&
+            o.studentEmail.toLowerCase() === currentStudent.email.toLowerCase() &&
+            (o.noteIds.includes(noteId) ||
+              (o.noteIds.includes('bundle-fsc2-complete') && ['fsc2-phy-ch12', 'fsc2-math-ch2'].includes(noteId)))
+        );
+        if (studentVerified) {
+          studentData = {
+            name: studentVerified.studentName,
+            email: studentVerified.studentEmail,
+            phone: studentVerified.studentPhone,
+            orderId: studentVerified.id,
+          };
+        }
       }
     }
 
@@ -226,9 +285,11 @@ export default function App() {
       return;
     }
 
-    // Open viewer with resilient access verification
+    // Open viewer with resilient access verification (supports cross-device email auth)
     try {
-      const res = await fetch(`/api/notes/${noteId}?orderId=${encodeURIComponent(studentData.orderId)}`);
+      const res = await fetch(
+        `/api/notes/${noteId}?orderId=${encodeURIComponent(studentData.orderId)}&studentEmail=${encodeURIComponent(studentData.email)}`
+      );
       const contentType = res.headers.get('content-type') || '';
       if (res.ok && contentType.includes('application/json')) {
         const data = await res.json();
@@ -251,12 +312,6 @@ export default function App() {
     });
   };
 
-  // Map active nav tab to category filter
-  let categoryFilter = 'All';
-  if (activeTab === 'matric') categoryFilter = 'Matric-9th';
-  if (activeTab === 'fsc') categoryFilter = 'FSc-Part1';
-  if (activeTab === 'bsc') categoryFilter = 'BSc-Year1';
-
   return (
     <div className={`min-h-screen flex flex-col font-sans transition-colors ${
       theme === 'light' ? 'bg-slate-50 text-slate-900' : 'bg-zinc-950 text-zinc-100'
@@ -270,15 +325,23 @@ export default function App() {
       {/* Top Bar adhering to 3-zone contract */}
       <Navbar
         activeTab={activeTab}
-        setActiveTab={setActiveTab}
+        setActiveTab={(tab) => {
+          setActiveTab(tab);
+          if (tab === 'matric') setSelectedCategory('Matric-9th');
+          else if (tab === 'fsc') setSelectedCategory('FSc-Part1');
+          else if (tab === 'bsc') setSelectedCategory('BSc-Year1');
+          else if (tab === 'catalog') setSelectedCategory('All');
+        }}
         cartCount={cart.length}
-        openCart={() => setIsCheckoutOpen(true)}
+        openCart={handleOpenCartOrCheckout}
         openAdmin={() => setIsAdminOpen(true)}
         unlockedCount={unlockedNoteIds.length}
         logoUrl={settings.logoUrl}
         isAdminAuthenticated={isAdminAuthenticated}
         theme={theme}
         onToggleTheme={handleToggleTheme}
+        currentStudent={currentStudent}
+        openStudentAuth={() => setIsStudentAuthOpen(true)}
       />
 
       {/* Access Denied Warning Toast if student tries to open course they haven't paid for */}
@@ -305,9 +368,8 @@ export default function App() {
         {['catalog', 'matric', 'fsc', 'bsc'].includes(activeTab) && (
           <Hero
             onSelectCategory={(cat) => {
-              if (cat.startsWith('Matric')) setActiveTab('matric');
-              else if (cat.startsWith('FSc')) setActiveTab('fsc');
-              else if (cat.startsWith('BSc')) setActiveTab('bsc');
+              setSelectedCategory(cat);
+              setActiveTab('catalog');
             }}
             onOpenTrack={() => setActiveTab('track')}
           />
@@ -317,13 +379,9 @@ export default function App() {
         {['catalog', 'matric', 'fsc', 'bsc'].includes(activeTab) && (
           <CatalogSection
             notes={notes}
-            selectedCategory={categoryFilter}
+            selectedCategory={selectedCategory}
             setSelectedCategory={(cat) => {
-              if (cat === 'All') setActiveTab('catalog');
-              else if (cat.startsWith('Matric')) setActiveTab('matric');
-              else if (cat.startsWith('FSc')) setActiveTab('fsc');
-              else if (cat.startsWith('BSc')) setActiveTab('bsc');
-              else setActiveTab('catalog');
+              setSelectedCategory(cat);
             }}
             onPreviewNote={(note) => setPreviewNote(note)}
             onAddToCart={handleAddToCart}
@@ -340,6 +398,9 @@ export default function App() {
             allNotes={notes}
             onOpenViewer={handleOpenViewer}
             onTrackOrder={() => setActiveTab('track')}
+            currentStudent={currentStudent}
+            onOpenStudentAuth={() => setIsStudentAuthOpen(true)}
+            onRefreshOrders={refreshOrders}
           />
         )}
 
@@ -377,6 +438,8 @@ export default function App() {
           onRemoveFromCart={handleRemoveFromCart}
           onClose={() => setIsCheckoutOpen(false)}
           onOrderCreated={handleOrderCreated}
+          currentStudent={currentStudent}
+          onStudentAuthenticated={(stu) => setCurrentStudent(stu)}
           easyPaisaAccount={settings.easyPaisaNumber}
           whatsAppNumber={settings.whatsAppNumber}
         />
@@ -390,6 +453,42 @@ export default function App() {
           onClose={() => setActiveViewerState(null)}
         />
       )}
+
+      {/* Student Cross-Device Login Modal */}
+      <StudentAuthModal
+        isOpen={isStudentAuthOpen}
+        currentStudent={currentStudent}
+        onClose={() => {
+          setIsStudentAuthOpen(false);
+          setPendingCheckoutAfterLogin(false);
+        }}
+        title={pendingCheckoutAfterLogin ? 'Sign In with Gmail to Purchase' : 'Student Multi-Device Access'}
+        subtitle={
+          pendingCheckoutAfterLogin
+            ? 'Please enter your Gmail to link your purchase. You can then open and read your course on your phone, laptop, or tablet anytime.'
+            : 'Access your purchased courses from your mobile, laptop, or any other device using your Gmail.'
+        }
+        onStudentAuthenticated={(student) => {
+          setCurrentStudent(student);
+          apiGetStudentOrders(student.email).then((remoteOrders) => {
+            if (remoteOrders && remoteOrders.length > 0) {
+              setOrders((prev) => {
+                const map = new Map<string, Order>();
+                [...remoteOrders, ...prev].forEach((o) => map.set(o.id, o));
+                return Array.from(map.values());
+              });
+            }
+          });
+          setIsStudentAuthOpen(false);
+          if (pendingCheckoutAfterLogin) {
+            setPendingCheckoutAfterLogin(false);
+            setIsCheckoutOpen(true);
+          }
+        }}
+        onStudentLoggedOut={() => {
+          setCurrentStudent(null);
+        }}
+      />
 
       {/* Owner / Admin Portal (Password protected: Kainat / HamadJani) */}
       {isAdminOpen && (

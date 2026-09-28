@@ -17,6 +17,7 @@ import {
   Upload, 
   Lock, 
   Sparkles, 
+  Eye,
   Image as ImageIcon,
   Key,
   LogOut,
@@ -28,7 +29,8 @@ import {
   Check,
   HardDrive,
   Sun,
-  Moon
+  Moon,
+  Mail
 } from 'lucide-react';
 import { KainatLogo } from './KainatLogo';
 import { CircularLogoCropper } from './CircularLogoCropper';
@@ -50,6 +52,7 @@ import {
   apiExportDatabaseBackup,
   apiRestoreDatabaseBackup,
   apiCreateOrder,
+  apiTestSmtp,
 } from '../services/apiClient';
 
 interface AdminPortalProps {
@@ -113,7 +116,17 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
   const [loginError, setLoginError] = useState('');
 
   // Active tab inside admin
-  const [activeTab, setActiveTab] = useState<'orders' | 'notes' | 'branding' | 'database' | 'alerts'>('orders');
+  const [activeTab, setActiveTab] = useState<'orders' | 'notes' | 'branding' | 'database' | 'email-auth' | 'alerts'>('orders');
+
+  // SMTP & Google Auth state
+  const [smtpHostInput, setSmtpHostInput] = useState<string>(settings.smtpHost || 'smtp.gmail.com');
+  const [smtpPortInput, setSmtpPortInput] = useState<number>(settings.smtpPort || 465);
+  const [smtpUserInput, setSmtpUserInput] = useState<string>(settings.smtpUser || settings.ownerEmail || 'ka8984510@gmail.com');
+  const [smtpPassInput, setSmtpPassInput] = useState<string>(settings.smtpPass || '');
+  const [smtpSenderEmailInput, setSmtpSenderEmailInput] = useState<string>(settings.smtpSenderEmail || settings.ownerEmail || 'ka8984510@gmail.com');
+  const [googleClientIdInput, setGoogleClientIdInput] = useState<string>(settings.googleClientId || '');
+  const [isTestingSmtp, setIsTestingSmtp] = useState(false);
+  const [smtpTestResult, setSmtpTestResult] = useState<{ success: boolean; message: string } | null>(null);
 
   // Orders and metrics
   const [orders, setOrders] = useState<Order[]>([]);
@@ -160,6 +173,7 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
     rawTextContent: '',
     totalPages: 24,
     pricePKR: 199,
+    samplePdfUrl: '',
     googleDriveUrl: '',
     previewPageLimit: 3,
     coverImage: '',
@@ -426,12 +440,18 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
         whatsAppNumber: whatsAppInput.trim() || '0324 9059918',
         logoUrl: logoPreview,
         mongoDbUri: mongoUriInput.trim(),
+        smtpHost: smtpHostInput.trim() || 'smtp.gmail.com',
+        smtpPort: Number(smtpPortInput) || 465,
+        smtpUser: smtpUserInput.trim(),
+        smtpPass: smtpPassInput.trim(),
+        smtpSenderEmail: smtpSenderEmailInput.trim(),
+        googleClientId: googleClientIdInput.trim(),
       };
 
       const data = await apiSaveSettings(newSettings);
       if (data.success) {
         onUpdateSettings(data.settings);
-        showNotification('Brand & contact details saved successfully!');
+        showNotification('Settings & Email/Auth credentials saved successfully!');
         sound.verified();
         onRefreshData();
       } else {
@@ -441,6 +461,32 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
       showNotification('Server error while saving settings.', true);
     } finally {
       setIsSavingSettings(false);
+    }
+  };
+
+  const handleTestSmtp = async () => {
+    setIsTestingSmtp(true);
+    setSmtpTestResult(null);
+    try {
+      const res = await apiTestSmtp({
+        smtpHost: smtpHostInput.trim() || 'smtp.gmail.com',
+        smtpPort: Number(smtpPortInput) || 465,
+        smtpUser: smtpUserInput.trim(),
+        smtpPass: smtpPassInput.trim(),
+        smtpSenderEmail: smtpSenderEmailInput.trim(),
+        testRecipient: smtpUserInput.trim() || settings.ownerEmail || 'ka8984510@gmail.com',
+      });
+      setSmtpTestResult(res);
+      if (res.success) {
+        sound.verified();
+        showNotification(res.message);
+      } else {
+        showNotification(res.message, true);
+      }
+    } catch (e: any) {
+      setSmtpTestResult({ success: false, message: e?.message || 'SMTP test error' });
+    } finally {
+      setIsTestingSmtp(false);
     }
   };
 
@@ -512,6 +558,7 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
           rawTextContent: '',
           totalPages: 24,
           pricePKR: 199,
+          samplePdfUrl: '',
           googleDriveUrl: '',
           previewPageLimit: 3,
           coverImage: '',
@@ -567,6 +614,7 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
         : '',
       totalPages: note.totalPages,
       pricePKR: note.pricePKR,
+      samplePdfUrl: note.samplePdfUrl || '',
       googleDriveUrl: note.googleDriveUrl,
       previewPageLimit: note.previewPageLimit || 3,
       coverImage: note.coverImage || '',
@@ -1019,6 +1067,22 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
           </button>
 
           <button
+            onClick={() => { setActiveTab('email-auth'); setIsEditingNote(false); }}
+            className={`pb-2.5 px-2.5 sm:px-3 text-xs font-semibold border-b-2 transition-colors whitespace-nowrap shrink-0 flex items-center gap-1.5 ${
+              activeTab === 'email-auth'
+                ? isLight
+                  ? 'border-emerald-600 text-emerald-800 font-bold'
+                  : 'border-emerald-500 text-emerald-400'
+                : isLight
+                  ? 'border-transparent text-slate-600 hover:text-slate-900'
+                  : 'border-transparent text-zinc-400 hover:text-zinc-200'
+            }`}
+          >
+            <Mail className="w-3.5 h-3.5 shrink-0" />
+            <span>Email (SMTP) & Google Auth</span>
+          </button>
+
+          <button
             onClick={() => { setActiveTab('alerts'); setIsEditingNote(false); }}
             className={`pb-2.5 px-2.5 sm:px-3 text-xs font-semibold border-b-2 transition-colors whitespace-nowrap shrink-0 ${
               activeTab === 'alerts'
@@ -1313,6 +1377,7 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
                         rawTextContent: '',
                         totalPages: 24,
                         pricePKR: 199,
+                        samplePdfUrl: '',
                         googleDriveUrl: '',
                         previewPageLimit: 3,
                         coverImage: '',
@@ -1505,63 +1570,72 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
                     />
                   </div>
 
-                  {/* Paste Text / Curriculum To Create Beautiful Interactive Notes */}
-                  <div className={`p-3.5 sm:p-4 rounded-xl border space-y-2 ${
-                    isLight ? 'bg-emerald-50/50 border-emerald-200' : 'bg-emerald-950/20 border-emerald-800/50'
+                  {/* 2-PDF Google Drive System: Demo Sample PDF & Complete Locked PDF */}
+                  <div className={`p-4 rounded-xl border space-y-4 ${
+                    isLight ? 'bg-emerald-50/40 border-emerald-200' : 'bg-emerald-950/20 border-emerald-800/50'
                   }`}>
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-2">
-                        <Sparkles className="w-4 h-4 text-emerald-500" />
-                        <label className={`text-xs font-bold ${isLight ? 'text-emerald-950' : 'text-emerald-300'}`}>
-                          Paste Note Content or Textbook/Curriculum Text (Instant Beautiful Notes Generator)
-                        </label>
-                      </div>
-                      <span className="text-[10px] text-zinc-400 font-mono">
-                        Auto-splits into formatted pages with formulas, bullets & board questions
-                      </span>
+                    <div className="flex items-center gap-2">
+                      <FileText className="w-4 h-4 text-emerald-500" />
+                      <h4 className={`text-xs font-bold uppercase tracking-wider ${isLight ? 'text-emerald-950' : 'text-emerald-300'}`}>
+                        Google Drive PDF Configuration (Demo Sample & Complete Locked)
+                      </h4>
                     </div>
 
-                    <textarea
-                      rows={5}
-                      value={noteForm.rawTextContent}
-                      onChange={(e) => {
-                        const text = e.target.value;
-                        const pageCount = countEstimatedPagesFromRawContent(text);
-                        setNoteForm({
-                          ...noteForm,
-                          rawTextContent: text,
-                          totalPages: text.trim() ? pageCount : noteForm.totalPages,
-                        });
-                      }}
-                      placeholder="Paste your curriculum, syllabus, or lecture notes text here! Example:
-I. Microscopy
-• Principle of Simple & Compound Microscopes
-• Handling and working of microscope
-• Care, Cleaning & Quality Control of Microscope
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      {/* 1. Free Demo / Sample PDF Link */}
+                      <div className="space-y-1.5">
+                        <label className={`text-xs font-semibold flex items-center justify-between ${
+                          isLight ? 'text-slate-800' : 'text-zinc-200'
+                        }`}>
+                          <span className="flex items-center gap-1.5">
+                            <Eye className="w-3.5 h-3.5 text-emerald-500" />
+                            <span>1. Demo / Sample PDF Link (Google Drive)</span>
+                          </span>
+                          <span className="text-[10px] text-emerald-500 font-normal">Free for students</span>
+                        </label>
+                        <input
+                          type="url"
+                          value={noteForm.samplePdfUrl}
+                          onChange={(e) => setNoteForm({ ...noteForm, samplePdfUrl: e.target.value })}
+                          placeholder="https://drive.google.com/file/d/SAMPLE_PDF_ID/preview"
+                          className={`w-full rounded-lg px-3 py-2 text-xs font-mono focus:outline-none focus:ring-1 focus:ring-emerald-500 ${
+                            isLight
+                              ? 'bg-white border border-emerald-300 text-slate-900 placeholder:text-slate-400'
+                              : 'bg-zinc-900 border border-emerald-900/60 text-white placeholder:text-zinc-500'
+                          }`}
+                        />
+                        <p className="text-[11px] text-zinc-400">
+                          Upload a short 3-4 page sample PDF to your Drive. Unpaid students will read this demo in the catalog.
+                        </p>
+                      </div>
 
-II. Fixation & Tissue Processing
-• The purpose of fixation (Formaldehyde, Zenker's solution)
-• Factors affecting quality of fixation
----
-(Separate pages with '---' or paste continuous text)"
-                      className={`w-full rounded-lg px-3 py-2 text-xs font-mono focus:outline-none focus:ring-1 focus:ring-emerald-500 leading-relaxed ${
-                        isLight
-                          ? 'bg-white border border-emerald-300 text-slate-900 placeholder:text-slate-400'
-                          : 'bg-zinc-900 border border-emerald-900/60 text-zinc-100 placeholder:text-zinc-500'
-                      }`}
-                    />
-                    <div className="text-[11px] text-emerald-600 dark:text-emerald-400 flex items-center justify-between font-medium">
-                      <span className="flex items-center gap-1.5">
-                        <span>✓</span>
-                        <span>
-                          Formatted digital notes will appear inside the Secure Document Viewer & sample preview!
-                        </span>
-                      </span>
-                      {noteForm.rawTextContent.trim() && (
-                        <span className="font-mono text-emerald-500 font-bold bg-emerald-950/60 px-2 py-0.5 rounded border border-emerald-800">
-                          {countEstimatedPagesFromRawContent(noteForm.rawTextContent)} Pages Detected
-                        </span>
-                      )}
+                      {/* 2. Complete Full Notes PDF Link */}
+                      <div className="space-y-1.5">
+                        <label className={`text-xs font-semibold flex items-center justify-between ${
+                          isLight ? 'text-slate-800' : 'text-zinc-200'
+                        }`}>
+                          <span className="flex items-center gap-1.5">
+                            <Lock className="w-3.5 h-3.5 text-amber-500" />
+                            <span>2. Complete Notes PDF Link (Google Drive - Strictly Locked)</span>
+                          </span>
+                          <span className="text-[10px] text-amber-500 font-normal">Requires payment</span>
+                        </label>
+                        <input
+                          type="url"
+                          required
+                          value={noteForm.googleDriveUrl}
+                          onChange={(e) => setNoteForm({ ...noteForm, googleDriveUrl: e.target.value })}
+                          placeholder="https://drive.google.com/file/d/FULL_PDF_ID/preview"
+                          className={`w-full rounded-lg px-3 py-2 text-xs font-mono focus:outline-none focus:ring-1 focus:ring-emerald-500 ${
+                            isLight
+                              ? 'bg-white border border-amber-300 text-slate-900 placeholder:text-slate-400'
+                              : 'bg-zinc-900 border border-amber-900/60 text-white placeholder:text-zinc-500'
+                          }`}
+                        />
+                        <p className="text-[11px] text-zinc-400">
+                          Upload your complete notes PDF to Google Drive. This remains strictly locked until payment is verified.
+                        </p>
+                      </div>
                     </div>
                   </div>
 
@@ -1588,7 +1662,7 @@ II. Fixation & Tissue Processing
                     {/* Total Pages */}
                     <div className="space-y-1">
                       <label className={`text-xs font-semibold ${isLight ? 'text-slate-700' : 'text-zinc-300'}`}>
-                        Total Pages
+                        Total Pages in Full PDF
                       </label>
                       <input
                         type="number"
@@ -1603,51 +1677,21 @@ II. Fixation & Tissue Processing
                       />
                     </div>
 
-                    {/* Google Drive Link */}
+                    {/* Free Demo Sample Pages Limit */}
                     <div className="space-y-1">
                       <label className={`text-xs font-semibold ${isLight ? 'text-slate-700' : 'text-zinc-300'}`}>
-                        Google Drive Embed / Preview URL
+                        Sample Demo Pages Count
                       </label>
                       <input
-                        type="url"
-                        value={noteForm.googleDriveUrl}
-                        onChange={(e) => setNoteForm({ ...noteForm, googleDriveUrl: e.target.value })}
-                        placeholder="https://drive.google.com/file/d/.../preview"
+                        type="number"
+                        min="1"
+                        max="30"
+                        value={noteForm.previewPageLimit}
+                        onChange={(e) => setNoteForm({ ...noteForm, previewPageLimit: Math.max(1, Number(e.target.value) || 1) })}
                         className={`w-full rounded-lg px-3 py-2 text-xs font-mono focus:outline-none focus:ring-1 focus:ring-emerald-500 ${
                           isLight
                             ? 'bg-slate-50 border border-slate-300 text-slate-900'
                             : 'bg-zinc-900 border border-zinc-800 text-white'
-                        }`}
-                      />
-                    </div>
-                  </div>
-
-                  {/* Free Sample Preview Pages Limit (Kainat Protection) */}
-                  <div className={`p-3 rounded-lg border flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 ${
-                    isLight ? 'bg-amber-50/60 border-amber-200' : 'bg-amber-950/20 border-amber-900/50'
-                  }`}>
-                    <div className="space-y-0.5">
-                      <div className="flex items-center gap-1.5 text-xs font-bold text-amber-500">
-                        <Lock className="w-3.5 h-3.5" />
-                        <span>Free Sample Preview Limit (Unpaid Students)</span>
-                      </div>
-                      <p className="text-[11px] text-zinc-400">
-                        How many sample pages can unpaid students read before checkout? (Default: 3 pages)
-                      </p>
-                    </div>
-
-                    <div className="flex items-center gap-2 shrink-0">
-                      <label className="text-xs text-zinc-400 font-medium">Free Pages:</label>
-                      <input
-                        type="number"
-                        min="1"
-                        max="20"
-                        value={noteForm.previewPageLimit}
-                        onChange={(e) => setNoteForm({ ...noteForm, previewPageLimit: Math.max(1, Number(e.target.value) || 1) })}
-                        className={`w-20 rounded-lg px-2.5 py-1.5 text-xs font-mono font-bold text-center focus:outline-none focus:ring-1 focus:ring-amber-500 ${
-                          isLight
-                            ? 'bg-white border border-amber-300 text-slate-900'
-                            : 'bg-zinc-900 border border-amber-800 text-white'
                         }`}
                       />
                     </div>
@@ -2180,7 +2224,211 @@ II. Fixation & Tissue Processing
             </div>
           )}
 
-          {/* TAB 5: AUTOMATED ALERT FEED */}
+          {/* TAB: EMAIL (SMTP) & GOOGLE AUTHENTICATION SETUP */}
+          {activeTab === 'email-auth' && (
+            <div className="space-y-4 sm:space-y-6 max-w-3xl mx-auto">
+              {/* Header Box */}
+              <div className={`p-4 rounded-xl border space-y-2 ${
+                isLight ? 'bg-white border-slate-200 shadow-xs' : 'bg-zinc-950 border-zinc-800'
+              }`}>
+                <div className="flex items-center gap-2">
+                  <Mail className="w-5 h-5 text-emerald-600" />
+                  <h3 className={`text-sm font-bold ${isLight ? 'text-slate-900' : 'text-white'}`}>
+                    Real-Time Email Verification (SMTP) & Google Sign-In Setup
+                  </h3>
+                </div>
+                <p className={`text-xs leading-relaxed ${isLight ? 'text-slate-600' : 'text-zinc-400'}`}>
+                  Configure your Gmail SMTP credentials so that when a student enters their Gmail address during checkout or login, a real 6-digit verification code is instantly delivered to their Gmail inbox in real time! You can also configure official 3rd-party Google Sign-In.
+                </p>
+              </div>
+
+              {/* Live Status Card */}
+              <div className={`p-4 rounded-xl border flex items-center justify-between gap-3 ${
+                smtpPassInput.trim()
+                  ? isLight ? 'bg-emerald-50 border-emerald-200 text-emerald-900' : 'bg-emerald-950/40 border-emerald-800 text-emerald-300'
+                  : isLight ? 'bg-amber-50 border-amber-200 text-amber-900' : 'bg-amber-950/40 border-amber-800 text-amber-300'
+              }`}>
+                <div className="flex items-center gap-2.5">
+                  <div className={`w-3 h-3 rounded-full shrink-0 ${smtpPassInput.trim() ? 'bg-emerald-500 animate-pulse' : 'bg-amber-500'}`} />
+                  <div>
+                    <div className="text-xs font-bold">
+                      {smtpPassInput.trim() ? 'SMTP Server Active & Configured' : 'SMTP Server Not Yet Configured'}
+                    </div>
+                    <div className="text-[11px] opacity-80">
+                      {smtpPassInput.trim()
+                        ? `Outgoing emails dispatched via ${smtpUserInput || 'your Gmail'} (Port ${smtpPortInput})`
+                        : 'Add your Google App Password below so student verification codes send directly to their inboxes.'}
+                    </div>
+                  </div>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={handleTestSmtp}
+                  disabled={isTestingSmtp || !smtpPassInput.trim()}
+                  className="px-3.5 py-1.5 rounded-lg text-xs font-semibold bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white transition-colors flex items-center gap-1.5 shrink-0"
+                >
+                  <RefreshCw className={`w-3 h-3 ${isTestingSmtp ? 'animate-spin' : ''}`} />
+                  <span>{isTestingSmtp ? 'Sending Test...' : 'Send Test Email'}</span>
+                </button>
+              </div>
+
+              {smtpTestResult && (
+                <div className={`p-3.5 rounded-xl border text-xs flex items-center gap-2 ${
+                  smtpTestResult.success
+                    ? isLight ? 'bg-emerald-50 border-emerald-200 text-emerald-800' : 'bg-emerald-950/60 border-emerald-800 text-emerald-300'
+                    : isLight ? 'bg-rose-50 border-rose-200 text-rose-800' : 'bg-rose-950/60 border-rose-800 text-rose-300'
+                }`}>
+                  {smtpTestResult.success ? (
+                    <CheckCircle2 className="w-4 h-4 shrink-0 text-emerald-500" />
+                  ) : (
+                    <XCircle className="w-4 h-4 shrink-0 text-rose-500" />
+                  )}
+                  <span>{smtpTestResult.message}</span>
+                </div>
+              )}
+
+              {/* 1. Gmail SMTP Credentials Form */}
+              <div className={`p-4 sm:p-5 rounded-xl border space-y-4 ${
+                isLight ? 'bg-white border-slate-200 shadow-xs' : 'bg-zinc-950/60 border-zinc-800'
+              }`}>
+                <div className="flex items-center justify-between border-b pb-2">
+                  <h4 className={`text-xs font-bold uppercase tracking-wider ${isLight ? 'text-slate-800' : 'text-zinc-200'}`}>
+                    1. Gmail / SMTP Dispatch Credentials
+                  </h4>
+                  <span className="text-[11px] text-emerald-600 font-mono">100% Free with Google</span>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div className="space-y-1">
+                    <label className={`text-xs font-semibold ${isLight ? 'text-slate-700' : 'text-zinc-300'}`}>
+                      SMTP Host
+                    </label>
+                    <input
+                      type="text"
+                      value={smtpHostInput}
+                      onChange={(e) => setSmtpHostInput(e.target.value)}
+                      placeholder="smtp.gmail.com"
+                      className={`w-full rounded-lg px-3 py-2 text-xs font-mono focus:outline-none focus:ring-1 focus:ring-emerald-500 ${
+                        isLight ? 'bg-slate-50 border border-slate-300 text-slate-900' : 'bg-zinc-900 border border-zinc-800 text-white'
+                      }`}
+                    />
+                  </div>
+
+                  <div className="space-y-1">
+                    <label className={`text-xs font-semibold ${isLight ? 'text-slate-700' : 'text-zinc-300'}`}>
+                      SMTP Port (465 for SSL, 587 for TLS)
+                    </label>
+                    <input
+                      type="number"
+                      value={smtpPortInput}
+                      onChange={(e) => setSmtpPortInput(Number(e.target.value) || 465)}
+                      placeholder="465"
+                      className={`w-full rounded-lg px-3 py-2 text-xs font-mono focus:outline-none focus:ring-1 focus:ring-emerald-500 ${
+                        isLight ? 'bg-slate-50 border border-slate-300 text-slate-900' : 'bg-zinc-900 border border-zinc-800 text-white'
+                      }`}
+                    />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div className="space-y-1">
+                    <label className={`text-xs font-semibold ${isLight ? 'text-slate-700' : 'text-zinc-300'}`}>
+                      Sender Gmail / Username *
+                    </label>
+                    <input
+                      type="email"
+                      value={smtpUserInput}
+                      onChange={(e) => setSmtpUserInput(e.target.value)}
+                      placeholder="ka8984510@gmail.com"
+                      className={`w-full rounded-lg px-3 py-2 text-xs font-mono focus:outline-none focus:ring-1 focus:ring-emerald-500 ${
+                        isLight ? 'bg-slate-50 border border-slate-300 text-slate-900' : 'bg-zinc-900 border border-zinc-800 text-white'
+                      }`}
+                    />
+                  </div>
+
+                  <div className="space-y-1">
+                    <label className={`text-xs font-semibold ${isLight ? 'text-slate-700' : 'text-zinc-300'}`}>
+                      Google 16-Letter App Password *
+                    </label>
+                    <input
+                      type="password"
+                      value={smtpPassInput}
+                      onChange={(e) => setSmtpPassInput(e.target.value)}
+                      placeholder="e.g. abcd efgh ijkl mnop"
+                      className={`w-full rounded-lg px-3 py-2 text-xs font-mono focus:outline-none focus:ring-1 focus:ring-emerald-500 ${
+                        isLight ? 'bg-slate-50 border border-slate-300 text-slate-900' : 'bg-zinc-900 border border-zinc-800 text-white'
+                      }`}
+                    />
+                  </div>
+                </div>
+
+                {/* Instructions on how to get free Google App Password */}
+                <div className={`p-3.5 rounded-xl border text-xs space-y-1.5 ${
+                  isLight ? 'bg-slate-50 border-slate-200 text-slate-700' : 'bg-zinc-900 border-zinc-800 text-zinc-300'
+                }`}>
+                  <div className="font-bold text-emerald-600 flex items-center gap-1.5">
+                    <span>🔑 How to generate your free Google App Password in 1 minute:</span>
+                  </div>
+                  <ol className="list-decimal pl-4 space-y-1 text-[11px] text-zinc-400">
+                    <li>Go to your Google Account: <a href="https://myaccount.google.com/security" target="_blank" rel="noopener noreferrer" className="text-emerald-500 hover:underline">myaccount.google.com/security</a></li>
+                    <li>Make sure <strong>2-Step Verification</strong> is switched <strong>ON</strong>.</li>
+                    <li>In the search box at top, type <strong>"App passwords"</strong> and select it.</li>
+                    <li>Enter App Name as <strong>Kainat Notes Hub</strong> and click <strong>Create</strong>.</li>
+                    <li>Copy the 16-letter code and paste it into the <em>Google 16-Letter App Password</em> box above!</li>
+                  </ol>
+                </div>
+              </div>
+
+              {/* 2. Official Google OAuth Sign-In Setup */}
+              <div className={`p-4 sm:p-5 rounded-xl border space-y-4 ${
+                isLight ? 'bg-white border-slate-200 shadow-xs' : 'bg-zinc-950/60 border-zinc-800'
+              }`}>
+                <div className="flex items-center justify-between border-b pb-2">
+                  <h4 className={`text-xs font-bold uppercase tracking-wider ${isLight ? 'text-slate-800' : 'text-zinc-200'}`}>
+                    2. Official 3rd-Party Google Sign-In (OAuth / GIS)
+                  </h4>
+                  <span className="text-[11px] text-blue-500 font-mono">1-Click Login</span>
+                </div>
+
+                <div className="space-y-1.5">
+                  <label className={`text-xs font-semibold ${isLight ? 'text-slate-700' : 'text-zinc-300'}`}>
+                    Google OAuth Client ID (Optional for 1-Click "Continue with Google" Button)
+                  </label>
+                  <input
+                    type="text"
+                    value={googleClientIdInput}
+                    onChange={(e) => setGoogleClientIdInput(e.target.value)}
+                    placeholder="xxxxxxxxxxxx-xxxxxxxxxxxxxxxx.apps.googleusercontent.com"
+                    className={`w-full rounded-lg px-3 py-2 text-xs font-mono focus:outline-none focus:ring-1 focus:ring-emerald-500 ${
+                      isLight ? 'bg-slate-50 border border-slate-300 text-slate-900' : 'bg-zinc-900 border border-zinc-800 text-white'
+                    }`}
+                  />
+                  <p className="text-[11px] text-zinc-500">
+                    Create a free Web OAuth Client ID in <a href="https://console.cloud.google.com/apis/credentials" target="_blank" rel="noopener noreferrer" className="text-emerald-500 hover:underline">Google Cloud Console</a>. When pasted here, students can sign in with 1 click using Google without needing an OTP code!
+                  </p>
+                </div>
+              </div>
+
+              {/* Save Button */}
+              <button
+                type="button"
+                onClick={handleSaveSettings}
+                disabled={isSavingSettings}
+                className="w-full py-3 px-4 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs font-bold shadow-lg shadow-emerald-950/40 transition-all flex items-center justify-center gap-2 active:scale-95"
+              >
+                {isSavingSettings ? (
+                  <>
+                    <RefreshCw className="w-4 h-4 animate-spin" />
+                    <span>Saving Email & Google Auth Credentials...</span>
+                  </>
+                ) : (
+                  <span>Save Email (SMTP) & Google Sign-In Settings</span>
+                )}
+              </button>
+            </div>
+          )}
+
           {activeTab === 'alerts' && (
             <div className="space-y-4">
               <div className={`text-xs ${isLight ? 'text-slate-600' : 'text-zinc-400'}`}>
