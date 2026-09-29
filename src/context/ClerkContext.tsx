@@ -1,7 +1,7 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
-import { ClerkProvider, useUser, useClerk, SignedIn, SignedOut } from '@clerk/clerk-react';
+import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
+import { ClerkProvider, useUser } from '@clerk/clerk-react';
 import { StudentUser } from '../types';
-import { getStoredSettings, saveStoredSettings, saveStoredStudent, getStoredStudent } from '../services/apiClient';
+import { getStoredSettings, saveStoredSettings } from '../services/apiClient';
 
 interface ClerkContextValue {
   publishableKey: string;
@@ -20,32 +20,27 @@ const ClerkContext = createContext<ClerkContextValue>({
 export const useClerkConfig = () => useContext(ClerkContext);
 
 interface ClerkAuthProviderProps {
-  children: React.ReactNode;
-  onStudentSync?: (student: StudentUser | null) => void;
+  children: ReactNode;
+  onStudentSync?: (student: StudentUser) => void;
 }
 
-/**
- * Inner component that watches Clerk auth state and syncs the logged-in
- * Google/Gmail student into the app's student state.
- */
-const ClerkStudentSync: React.FC<{ onStudentSync?: (student: StudentUser | null) => void }> = ({ onStudentSync }) => {
-  const { user, isLoaded, isSignedIn } = useUser();
+// Internal component that listens to Clerk sign-in state and syncs student
+const ClerkStudentSync: React.FC<{
+  onStudentSync?: (student: StudentUser) => void;
+}> = ({ onStudentSync }) => {
+  const { isLoaded, isSignedIn, user } = useUser();
 
   useEffect(() => {
-    if (!isLoaded) return;
-
-    if (isSignedIn && user) {
+    if (isLoaded && isSignedIn && user) {
       const email = user.primaryEmailAddress?.emailAddress;
       if (email) {
         const studentObj: StudentUser = {
-          email: email.trim().toLowerCase(),
-          name: user.fullName || user.firstName || email.split('@')[0],
-          phone: user.phoneNumbers?.[0]?.phoneNumber || '',
+          id: user.id,
+          email: email.toLowerCase().trim(),
+          name: user.fullName || user.firstName || 'Student',
+          phone: user.primaryPhoneNumber?.phoneNumber || '',
           verifiedAt: new Date().toISOString(),
-          deviceId: `clerk_${user.id}`,
-          imageUrl: user.imageUrl || '',
         };
-        saveStoredStudent(studentObj);
         if (onStudentSync) {
           onStudentSync(studentObj);
         }
@@ -87,6 +82,26 @@ export const ClerkAuthProvider: React.FC<ClerkAuthProviderProps> = ({ children, 
   const isConfigured = Boolean(publishableKey && publishableKey.trim().startsWith('pk_'));
 
   useEffect(() => {
+    // 1. Fetch public Clerk Key from server immediately on boot (crucial for new browsers/incognito)
+    fetch('/api/clerk-key')
+      .then((res) => res.json())
+      .then((data) => {
+        if (data.success && data.clerkPublishableKey && data.clerkPublishableKey.trim().startsWith('pk_')) {
+          const key = data.clerkPublishableKey.trim();
+          setPublishableKey((prev) => (prev !== key ? key : prev));
+          try {
+            localStorage.setItem('kainat_clerk_pub_key', key);
+            const settings = getStoredSettings();
+            settings.clerkPublishableKey = key;
+            saveStoredSettings(settings);
+          } catch {
+            // ignore
+          }
+        }
+      })
+      .catch(() => {});
+
+    // 2. Listener & Poll for instant sync across tabs
     const checkKey = () => {
       try {
         const stored = localStorage.getItem('kainat_clerk_pub_key');
@@ -103,7 +118,7 @@ export const ClerkAuthProvider: React.FC<ClerkAuthProviderProps> = ({ children, 
       }
     };
     window.addEventListener('storage', checkKey);
-    const interval = setInterval(checkKey, 1500);
+    const interval = setInterval(checkKey, 2000);
     return () => {
       window.removeEventListener('storage', checkKey);
       clearInterval(interval);
@@ -119,7 +134,7 @@ export const ClerkAuthProvider: React.FC<ClerkAuthProviderProps> = ({ children, 
       settings.clerkPublishableKey = trimmed;
       saveStoredSettings(settings);
 
-      // Persist to server if online
+      // Persist to server
       await fetch('/api/settings', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -149,7 +164,6 @@ export const ClerkAuthProvider: React.FC<ClerkAuthProviderProps> = ({ children, 
     clearKey,
   };
 
-  // If a valid publishable key starting with pk_ is provided, mount ClerkProvider
   if (isConfigured) {
     return (
       <ClerkContext.Provider value={contextValue}>
@@ -161,7 +175,6 @@ export const ClerkAuthProvider: React.FC<ClerkAuthProviderProps> = ({ children, 
     );
   }
 
-  // Fallback if key is not yet set: render children directly so app never crashes
   return (
     <ClerkContext.Provider value={contextValue}>
       {children}

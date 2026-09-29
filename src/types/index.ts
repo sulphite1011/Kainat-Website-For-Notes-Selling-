@@ -1,19 +1,6 @@
-export type ClassLevel = 
-  | 'Matric-9th' 
-  | 'Matric-10th' 
-  | 'FSc-Part1' 
-  | 'FSc-Part2' 
-  | 'BSc-Year1' 
-  | 'BSc-Year2'
-  | string;
+export type ClassLevel = 'Matric-9th' | 'Matric-10th' | 'FSc-Part1' | 'FSc-Part2' | 'BSc-Year1' | 'BSc-Year2';
 
-export type SubjectName = 
-  | 'Physics' 
-  | 'Chemistry' 
-  | 'Mathematics' 
-  | 'Biology' 
-  | 'Computer Science'
-  | string;
+export type SubjectName = 'Physics' | 'Chemistry' | 'Mathematics' | 'Biology' | 'Computer Science' | 'Urdu' | 'English' | 'Pak Studies' | 'Islamiat';
 
 export interface NotePage {
   pageNumber: number;
@@ -35,28 +22,19 @@ export interface NoteItem {
   description: string;
   totalPages: number;
   pricePKR: number;
-  isBundle?: boolean;
-  bundleNoteIds?: string[];
   rating: number;
   reviewsCount: number;
   topicsCovered: string[];
+  previewPages: NotePage[];
+  fullContentPages: NotePage[];
   samplePdfUrl?: string;
-  googleDriveUrl: string;
-  googleDriveFileId?: string;
+  googleDriveUrl?: string;
   previewPageLimit?: number;
   coverImage?: string;
-  previewPages?: NotePage[];
-  fullContentPages?: NotePage[];
+  isBundle?: boolean;
 }
 
-export interface StudentUser {
-  email: string;
-  name: string;
-  phone?: string;
-  verifiedAt?: string;
-  deviceId?: string;
-  imageUrl?: string;
-}
+export type OrderStatus = 'pending' | 'verified' | 'rejected';
 
 export interface Order {
   id: string;
@@ -64,22 +42,31 @@ export interface Order {
   studentEmail: string;
   studentPhone: string;
   noteIds: string[];
-  noteTitles?: string[];
+  noteTitles: string[];
   totalAmountPKR: number;
-  paymentMethod: 'easypaisa';
+  paymentMethod: 'easypaisa' | 'manual';
   easypaisaAccount: string;
   trxId: string;
   screenshotUrl?: string;
-  status: 'pending' | 'verified' | 'rejected';
+  status: OrderStatus;
   createdAt: string;
   verifiedAt?: string;
   accessToken?: string;
   notesUnlocked?: Array<{
     id: string;
     title: string;
-    classLevel: ClassLevel;
-    subject: SubjectName;
+    classLevel: string;
+    subject: string;
   }>;
+}
+
+export interface StudentUser {
+  id?: string;
+  email: string;
+  name: string;
+  phone?: string;
+  verifiedAt?: string;
+  orders?: Order[];
 }
 
 export interface OrderNotificationAlert {
@@ -96,7 +83,7 @@ export interface OrderNotificationAlert {
 export interface SiteSettings {
   siteName: string;
   ownerName: string;
-  logoUrl: string; // custom uploaded picture base64 or demo logo
+  logoUrl?: string;
   easyPaisaNumber: string;
   whatsAppNumber: string;
   ownerEmail: string;

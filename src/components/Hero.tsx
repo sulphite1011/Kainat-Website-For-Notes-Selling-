@@ -32,46 +32,46 @@ export const Hero: React.FC<HeroProps> = ({ onSelectCategory, onOpenTrack }) => 
             </h1>
 
             <p className="text-base sm:text-lg text-zinc-300 max-w-2xl leading-relaxed">
-              Hand-crafted derivations, unit-by-unit solved past papers, formula sheets, and topper exam summaries by Kainat. Direct EasyPaisa checkout, quick WhatsApp confirmation, and secure anti-copy dynamic reader.
+              Topper-curated derivations, solved past papers, formula sheets, and chapter summaries. Quick EasyPaisa checkout, fast WhatsApp activation, and instant multi-device digital reading.
             </p>
 
             {/* Quick Segmented Selectors */}
             <div className="flex flex-wrap items-center gap-2 pt-2">
               <button
                 onClick={() => onSelectCategory('Matric-9th')}
-                className="px-3.5 py-1.5 text-xs font-semibold text-zinc-200 bg-zinc-800/80 hover:bg-zinc-700/80 border border-zinc-700/50 rounded-lg transition-colors"
+                className="px-3.5 py-1.5 text-xs font-semibold text-zinc-200 bg-zinc-800/80 hover:bg-zinc-700/80 border border-zinc-700/50 rounded-lg transition-colors cursor-pointer"
               >
                 Matric 9th
               </button>
               <button
                 onClick={() => onSelectCategory('Matric-10th')}
-                className="px-3.5 py-1.5 text-xs font-semibold text-zinc-200 bg-zinc-800/80 hover:bg-zinc-700/80 border border-zinc-700/50 rounded-lg transition-colors"
+                className="px-3.5 py-1.5 text-xs font-semibold text-zinc-200 bg-zinc-800/80 hover:bg-zinc-700/80 border border-zinc-700/50 rounded-lg transition-colors cursor-pointer"
               >
                 Matric 10th
               </button>
               <button
                 onClick={() => onSelectCategory('FSc-Part1')}
-                className="px-3.5 py-1.5 text-xs font-semibold text-zinc-200 bg-zinc-800/80 hover:bg-zinc-700/80 border border-zinc-700/50 rounded-lg transition-colors"
+                className="px-3.5 py-1.5 text-xs font-semibold text-zinc-200 bg-zinc-800/80 hover:bg-zinc-700/80 border border-zinc-700/50 rounded-lg transition-colors cursor-pointer"
               >
                 FSc Part-1 (11th)
               </button>
               <button
                 onClick={() => onSelectCategory('FSc-Part2')}
-                className="px-3.5 py-1.5 text-xs font-semibold text-zinc-200 bg-zinc-800/80 hover:bg-zinc-700/80 border border-zinc-700/50 rounded-lg transition-colors"
+                className="px-3.5 py-1.5 text-xs font-semibold text-zinc-200 bg-zinc-800/80 hover:bg-zinc-700/80 border border-zinc-700/50 rounded-lg transition-colors cursor-pointer"
               >
                 FSc Part-2 (12th)
               </button>
               <button
                 onClick={() => onSelectCategory('BSc-Year1')}
-                className="px-3.5 py-1.5 text-xs font-semibold text-zinc-200 bg-zinc-800/80 hover:bg-zinc-700/80 border border-zinc-700/50 rounded-lg transition-colors"
+                className="px-3.5 py-1.5 text-xs font-semibold text-zinc-200 bg-zinc-800/80 hover:bg-zinc-700/80 border border-zinc-700/50 rounded-lg transition-colors cursor-pointer"
               >
                 BSc Higher Sciences
               </button>
               <button
                 onClick={onOpenTrack}
-                className="px-3.5 py-1.5 text-xs font-semibold text-emerald-300 hover:text-emerald-200 bg-emerald-950/40 hover:bg-emerald-950/60 border border-emerald-800/40 rounded-lg transition-colors"
+                className="px-3.5 py-1.5 text-xs font-semibold text-emerald-300 hover:text-emerald-200 bg-emerald-950/40 hover:bg-emerald-950/60 border border-emerald-800/40 rounded-lg transition-colors cursor-pointer"
               >
-                Check My Order Status
+                Track My Order
               </button>
             </div>
 
@@ -79,15 +79,15 @@ export const Hero: React.FC<HeroProps> = ({ onSelectCategory, onOpenTrack }) => 
             <div className="pt-4 border-t border-zinc-800/60 grid grid-cols-1 sm:grid-cols-3 gap-4 text-xs text-zinc-400">
               <div className="flex items-center gap-2">
                 <Smartphone className="w-4 h-4 text-emerald-400 shrink-0" />
-                <span>EasyPaisa <strong className="text-zinc-200">03415892099</strong></span>
+                <span>EasyPaisa: <strong className="text-zinc-200">03415892099</strong></span>
               </div>
               <div className="flex items-center gap-2">
                 <CheckCircle2 className="w-4 h-4 text-teal-400 shrink-0" />
-                <span>WhatsApp <strong className="text-zinc-200">0324 9059918</strong></span>
+                <span>WhatsApp: <strong className="text-zinc-200">0324 9059918</strong></span>
               </div>
               <div className="flex items-center gap-2">
                 <ShieldCheck className="w-4 h-4 text-indigo-400 shrink-0" />
-                <span>Protected Watermark Reader</span>
+                <span>Secure Digital Reader</span>
               </div>
             </div>
           </div>
@@ -98,17 +98,26 @@ export const Hero: React.FC<HeroProps> = ({ onSelectCategory, onOpenTrack }) => 
               <img
                 src="/images/hero_notes_showcase_1790249177382.jpg"
                 alt="Comprehensive scientific source notes by Kainat"
-                referrerPolicy="no-referrer"
-                className="w-full h-72 sm:h-80 object-cover group-hover:scale-105 transition-transform duration-500"
+                className="w-full h-80 lg:h-96 object-cover group-hover:scale-105 transition-transform duration-500"
+                onError={(e) => {
+                  e.currentTarget.style.display = 'none';
+                  const fallback = e.currentTarget.parentElement?.querySelector('.img-hero-fallback');
+                  if (fallback) (fallback as HTMLElement).style.display = 'flex';
+                }}
               />
-              <div className="absolute inset-0 bg-gradient-to-t from-zinc-950 via-zinc-950/30 to-transparent" />
-              
-              <div className="absolute bottom-4 left-4 right-4 p-3 bg-zinc-900/90 backdrop-blur-md border border-zinc-800 rounded-xl flex items-center justify-between">
-                <div className="space-y-0.5">
-                  <div className="text-xs font-semibold text-white">Curated by Kainat</div>
-                  <div className="text-[11px] text-zinc-400">All Punjab & Federal Board Exam Questions Solved</div>
+              <div className="img-hero-fallback hidden w-full h-80 lg:h-96 items-center justify-center bg-zinc-900 text-zinc-400 flex-col gap-3">
+                <ShieldCheck className="w-12 h-12 text-emerald-400" />
+                <span className="text-sm font-semibold">Curated Examination Vault</span>
+              </div>
+              <div className="absolute inset-0 bg-gradient-to-t from-zinc-950/80 via-transparent to-transparent pointer-events-none" />
+              <div className="absolute bottom-4 left-4 right-4 p-3 bg-zinc-900/90 backdrop-blur-md rounded-xl border border-zinc-700/60 flex items-center justify-between text-xs">
+                <div>
+                  <span className="text-white font-bold block">100% Board Syllabus Solved</span>
+                  <span className="text-zinc-400 text-[11px]">Handwritten Derivations & Diagrams</span>
                 </div>
-                <span className="text-xs font-bold text-emerald-400 font-mono">From Rs. 180</span>
+                <span className="px-2.5 py-1 rounded bg-emerald-500/20 text-emerald-300 font-bold border border-emerald-500/40 text-[11px]">
+                  Verified
+                </span>
               </div>
             </div>
           </div>

@@ -1,81 +1,47 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { NoteItem, Order, StudentUser } from '../types';
-import { X, Copy, Check, Smartphone, Upload, Send, ArrowRight, CheckCircle2, ShieldCheck, Mail } from 'lucide-react';
-import { apiUploadImage, apiCreateOrder, saveStoredStudent } from '../services/apiClient';
+import { X, Smartphone, CheckCircle2, ShieldCheck, Copy, Check, MessageSquare, AlertCircle, RefreshCw } from 'lucide-react';
+import { apiCreateOrder, saveStoredStudent } from '../services/apiClient';
 
 interface CheckoutModalProps {
-  cartNotes: NoteItem[];
-  onRemoveFromCart: (id: string) => void;
+  isOpen: boolean;
   onClose: () => void;
+  cartNotes: NoteItem[];
+  onRemoveFromCart: (noteId: string) => void;
   onOrderCreated: (order: Order) => void;
-  currentStudent?: StudentUser | null;
+  easyPaisaAccount: string;
+  whatsAppNumber: string;
   onStudentAuthenticated?: (student: StudentUser) => void;
-  easyPaisaAccount?: string;
-  whatsAppNumber?: string;
 }
 
 export const CheckoutModal: React.FC<CheckoutModalProps> = ({
+  isOpen,
+  onClose,
   cartNotes,
   onRemoveFromCart,
-  onClose,
   onOrderCreated,
-  currentStudent,
+  easyPaisaAccount,
+  whatsAppNumber,
   onStudentAuthenticated,
-  easyPaisaAccount = '03415892099',
-  whatsAppNumber = '0324 9059918',
 }) => {
-  const [studentName, setStudentName] = useState(currentStudent?.name || '');
-  const [studentEmail, setStudentEmail] = useState(currentStudent?.email || '');
-  const [studentPhone, setStudentPhone] = useState(currentStudent?.phone || '');
+  const [studentName, setStudentName] = useState('');
+  const [studentEmail, setStudentEmail] = useState('');
+  const [studentPhone, setStudentPhone] = useState('');
   const [trxId, setTrxId] = useState('');
-
-  useEffect(() => {
-    if (currentStudent) {
-      if (currentStudent.email && !studentEmail) setStudentEmail(currentStudent.email);
-      if (currentStudent.name && !studentName) setStudentName(currentStudent.name);
-      if (currentStudent.phone && !studentPhone) setStudentPhone(currentStudent.phone);
-    }
-  }, [currentStudent]);
-  const [screenshotPreview, setScreenshotPreview] = useState<string>('');
   const [copied, setCopied] = useState(false);
   const [loading, setLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
   const [submittedOrder, setSubmittedOrder] = useState<Order | null>(null);
-  const [whatsappUrl, setWhatsappUrl] = useState<string>('');
+  const [whatsappUrl, setWhatsappUrl] = useState('');
+
+  if (!isOpen) return null;
 
   const totalAmountPKR = cartNotes.reduce((sum, n) => sum + n.pricePKR, 0);
 
   const handleCopyAccount = () => {
     navigator.clipboard.writeText(easyPaisaAccount);
     setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
-  };
-
-  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file) {
-      if (file.size > 8 * 1024 * 1024) {
-        setErrorMessage('Screenshot file size exceeds 8MB limit. Please upload a smaller image.');
-        return;
-      }
-      const reader = new FileReader();
-      reader.onloadend = async () => {
-        const rawBase64 = reader.result as string;
-        setScreenshotPreview(rawBase64);
-        setErrorMessage('');
-
-        // Attempt upload or keep base64 fallback
-        try {
-          const uploadData = await apiUploadImage(rawBase64, 'easypaisa_proof_' + Date.now());
-          if (uploadData.success && uploadData.url) {
-            setScreenshotPreview(uploadData.url);
-          }
-        } catch {
-          // fallback to base64
-        }
-      };
-      reader.readAsDataURL(file);
-    }
+    setTimeout(() => setCopied(false), 2500);
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -83,7 +49,7 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
     setErrorMessage('');
 
     if (!studentName.trim() || !studentEmail.trim() || !studentPhone.trim() || !trxId.trim()) {
-      setErrorMessage('Please fill in all student details and your EasyPaisa TRX ID.');
+      setErrorMessage('Please fill in your name, Gmail, WhatsApp number, and TRX ID.');
       return;
     }
 
@@ -96,7 +62,7 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
       setLoading(true);
       const data = await apiCreateOrder({
         studentName: studentName.trim(),
-        studentEmail: studentEmail.trim(),
+        studentEmail: studentEmail.trim().toLowerCase(),
         studentPhone: studentPhone.trim(),
         noteIds: cartNotes.map((n) => n.id),
         noteTitles: cartNotes.map((n) => n.title),
@@ -104,11 +70,10 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
         paymentMethod: 'easypaisa',
         easypaisaAccount: easyPaisaAccount,
         trxId: trxId.trim(),
-        screenshotUrl: screenshotPreview || '',
       });
 
       if (!data.success || !data.order) {
-        throw new Error(data.message || 'Failed to submit order. Please check inputs.');
+        throw new Error(data.message || 'Failed to submit order.');
       }
 
       const formattedWhatsAppPhone = whatsAppNumber.replace(/[^0-9]/g, '');
@@ -117,25 +82,23 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
         `Assalam-o-Alaikum Kainat! I have placed Order #${data.order.id} on Kainat Notes Hub.%0A%0AStudent Name: ${data.order.studentName}%0AEmail: ${data.order.studentEmail}%0AEasyPaisa Trx ID: ${data.order.trxId}%0ATotal Amount: Rs. ${data.order.totalAmountPKR}%0A%0ACourses Ordered:%0A${notesListText}%0A%0APlease verify my payment and unlock my notes.`
       )}`;
 
-      // Auto-register and sync this student user across devices
-      if (studentEmail.trim()) {
-        const studentObj: StudentUser = {
-          email: studentEmail.trim().toLowerCase(),
-          name: studentName.trim(),
-          phone: studentPhone.trim(),
-          verifiedAt: new Date().toISOString(),
-        };
-        saveStoredStudent(studentObj);
-        if (onStudentAuthenticated) {
-          onStudentAuthenticated(studentObj);
-        }
+      // Save student for immediate device sync
+      const studentObj: StudentUser = {
+        email: studentEmail.trim().toLowerCase(),
+        name: studentName.trim(),
+        phone: studentPhone.trim(),
+        verifiedAt: new Date().toISOString(),
+      };
+      saveStoredStudent(studentObj);
+      if (onStudentAuthenticated) {
+        onStudentAuthenticated(studentObj);
       }
 
       setSubmittedOrder(data.order);
       setWhatsappUrl(waUrl);
       onOrderCreated(data.order);
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : 'Network error submitting order';
+      const msg = err instanceof Error ? err.message : 'Error submitting order.';
       setErrorMessage(msg);
     } finally {
       setLoading(false);
@@ -144,100 +107,95 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm overflow-y-auto">
-      <div className="relative w-full max-w-2xl my-8 rounded-2xl border border-zinc-800 bg-zinc-900 shadow-2xl overflow-hidden flex flex-col">
+      <div className="relative w-full max-w-xl my-8 rounded-2xl border border-zinc-800 bg-zinc-900 shadow-2xl overflow-hidden flex flex-col">
         {/* Header */}
         <div className="flex items-center justify-between px-6 py-4 border-b border-zinc-800 bg-zinc-950/80">
           <div>
             <div className="text-xs text-emerald-400 font-semibold flex items-center gap-1.5">
               <Smartphone className="w-3.5 h-3.5" />
-              <span>EasyPaisa Manual Payment Checkout</span>
+              <span>EasyPaisa Direct Checkout</span>
             </div>
-            <h2 className="text-lg font-bold text-white">Order Checkout & Verification</h2>
+            <h2 className="text-base font-bold text-white mt-0.5">Order Checkout</h2>
           </div>
           <button
             onClick={onClose}
-            className="p-1.5 text-zinc-400 hover:text-white rounded-lg hover:bg-zinc-800 transition-colors"
+            className="p-1.5 text-zinc-400 hover:text-white rounded-lg hover:bg-zinc-800 transition-colors cursor-pointer"
           >
-            <X className="w-5 h-5" />
+            <X className="w-4 h-4" />
           </button>
         </div>
 
         {/* Body */}
-        <div className="p-6 space-y-6 overflow-y-auto max-h-[75vh]">
+        <div className="p-6 space-y-5 overflow-y-auto max-h-[75vh]">
           {submittedOrder ? (
-            /* Post-submission Success / WhatsApp Sender View */
-            <div className="space-y-6 text-center py-4">
-              <div className="w-14 h-14 bg-emerald-950/80 border border-emerald-500/40 rounded-full flex items-center justify-center mx-auto text-emerald-400">
-                <CheckCircle2 className="w-8 h-8" />
+            /* Post-submission Success View */
+            <div className="space-y-5 text-center py-2">
+              <div className="w-12 h-12 bg-emerald-950/80 border border-emerald-500/40 rounded-full flex items-center justify-center mx-auto text-emerald-400">
+                <CheckCircle2 className="w-6 h-6" />
               </div>
 
               <div className="space-y-1">
-                <h3 className="text-xl font-bold text-white">Order Placed Successfully!</h3>
+                <h3 className="text-lg font-bold text-white">Order Submitted!</h3>
                 <p className="text-xs text-zinc-400">
-                  Your Order Reference ID is:{' '}
-                  <strong className="text-emerald-400 font-mono text-sm px-2 py-0.5 bg-zinc-950 rounded border border-zinc-800">
-                    {submittedOrder.id}
-                  </strong>
+                  Order Reference: <strong className="text-emerald-400 font-mono text-sm px-2 py-0.5 bg-zinc-950 rounded border border-zinc-800">{submittedOrder.id}</strong>
                 </p>
               </div>
 
-              {/* Action Box to send SS to Kainat at 0324 9059918 */}
-              <div className="p-5 rounded-xl border border-zinc-800 bg-zinc-950/80 text-left space-y-4">
-                <div className="flex items-center justify-between">
-                  <div className="text-xs font-semibold text-zinc-300">Final Verification Step:</div>
-                  <span className="text-[11px] text-amber-400 font-mono font-semibold">Action Required</span>
-                </div>
+              <div className="p-4 rounded-xl border border-zinc-800 bg-zinc-950/80 text-left space-y-3">
+                <div className="text-xs font-semibold text-zinc-200">Next Step: Verification via WhatsApp</div>
                 <p className="text-xs text-zinc-400 leading-relaxed">
-                  Send your EasyPaisa payment screenshot directly to Ma'am Kainat's official WhatsApp (
-                  <strong className="text-zinc-200">{whatsAppNumber}</strong>). Once verified by Kainat on the website, your purchased notes will unlock exclusively for your account with an automated audio and visual alert!
+                  Send your EasyPaisa payment screenshot to Kainat at <strong className="text-zinc-200">{whatsAppNumber}</strong>. Once approved, your notes will unlock instantly in your library!
                 </p>
 
-                <div className="p-3 rounded-lg bg-zinc-900 border border-zinc-800 text-xs space-y-1">
-                  <div className="text-zinc-400">
-                    EasyPaisa TRX ID: <strong className="text-zinc-200 font-mono">{submittedOrder.trxId}</strong>
-                  </div>
-                  <div className="text-zinc-400">
-                    Total Paid: <strong className="text-emerald-400 font-mono">Rs. {submittedOrder.totalAmountPKR}</strong>
-                  </div>
+                <div className="p-3 rounded-lg bg-zinc-900 border border-zinc-800 text-xs flex justify-between">
+                  <span className="text-zinc-400">TRX ID: <strong className="text-white font-mono">{submittedOrder.trxId}</strong></span>
+                  <span className="text-zinc-400">Amount: <strong className="text-emerald-400 font-mono">Rs. {submittedOrder.totalAmountPKR}</strong></span>
                 </div>
 
                 <a
                   href={whatsappUrl}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="w-full flex items-center justify-center gap-2 py-3 px-4 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl font-bold text-xs shadow-md transition-all active:scale-[0.99]"
+                  className="w-full py-3 px-4 bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs rounded-xl shadow-lg shadow-emerald-950/40 transition-all flex items-center justify-center gap-2"
                 >
-                  <Send className="w-4 h-4" />
-                  <span>Send Screenshot to WhatsApp ({whatsAppNumber})</span>
+                  <MessageSquare className="w-4 h-4" />
+                  <span>Send Screenshot on WhatsApp</span>
                 </a>
               </div>
 
-              <div className="text-xs text-zinc-500">
-                You can keep this browser tab open; the reader will automatically refresh and chime once approved by Kainat.
-              </div>
+              <button
+                type="button"
+                onClick={onClose}
+                className="w-full py-2.5 px-4 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 font-semibold text-xs rounded-xl transition-colors cursor-pointer"
+              >
+                Close & Return to Store
+              </button>
             </div>
           ) : (
             /* Checkout Form View */
-            <form onSubmit={handleSubmit} className="space-y-6">
-              {/* Cart Summary */}
-              <div className="rounded-xl border border-zinc-800 bg-zinc-950/60 p-4 space-y-3">
-                <div className="flex items-center justify-between text-xs font-semibold text-zinc-400 border-b border-zinc-800/80 pb-2">
-                  <span>Selected Notes ({cartNotes.length})</span>
-                  <span>Price</span>
+            <form onSubmit={handleSubmit} className="space-y-5">
+              {errorMessage && (
+                <div className="p-3 rounded-xl bg-rose-500/10 border border-rose-500/20 text-rose-400 text-xs flex items-center gap-2">
+                  <AlertCircle className="w-4 h-4 shrink-0" />
+                  <span>{errorMessage}</span>
                 </div>
-                <div className="space-y-2 max-h-36 overflow-y-auto pr-1">
+              )}
+
+              {/* Cart Items Summary */}
+              <div className="rounded-xl border border-zinc-800 bg-zinc-950/60 p-4 space-y-2.5">
+                <div className="text-xs font-bold text-zinc-300 uppercase tracking-wide">
+                  Order Summary ({cartNotes.length} Items)
+                </div>
+                <div className="divide-y divide-zinc-800/80 max-h-36 overflow-y-auto">
                   {cartNotes.map((note) => (
-                    <div key={note.id} className="flex items-center justify-between text-xs">
-                      <div className="truncate max-w-[70%]">
-                        <span className="text-zinc-200 font-medium">{note.title}</span>
-                        <span className="text-zinc-500 text-[11px] block">{note.classLevel} · {note.subject}</span>
-                      </div>
-                      <div className="flex items-center gap-3">
-                        <span className="font-mono text-zinc-300">Rs. {note.pricePKR}</span>
+                    <div key={note.id} className="py-2 flex items-center justify-between text-xs">
+                      <span className="text-zinc-200 truncate pr-3">{note.title}</span>
+                      <div className="flex items-center gap-2 shrink-0">
+                        <span className="font-mono text-emerald-400 font-semibold">Rs. {note.pricePKR}</span>
                         <button
                           type="button"
                           onClick={() => onRemoveFromCart(note.id)}
-                          className="text-zinc-500 hover:text-red-400"
+                          className="text-zinc-500 hover:text-red-400 cursor-pointer"
                         >
                           <X className="w-3.5 h-3.5" />
                         </button>
@@ -246,35 +204,32 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
                   ))}
                 </div>
                 <div className="border-t border-zinc-800/80 pt-2 flex items-center justify-between">
-                  <span className="text-xs font-semibold text-zinc-300">Total Payable:</span>
+                  <span className="text-xs font-semibold text-zinc-300">Total:</span>
                   <span className="text-base font-bold text-emerald-400 font-mono">
                     Rs. {totalAmountPKR}
                   </span>
                 </div>
               </div>
 
-              {/* EasyPaisa Payment Account Instructions Card */}
+              {/* Step 1: Payment Instructions */}
               <div className="rounded-xl border border-emerald-900/40 bg-emerald-950/20 p-4 space-y-3">
-                <div className="flex items-center justify-between">
-                  <span className="text-xs font-bold text-emerald-400 uppercase tracking-wide">
-                    Step 1: Transfer via EasyPaisa
-                  </span>
-                  <span className="text-[11px] text-zinc-400 font-mono">Manual Verification</span>
+                <div className="text-xs font-bold text-emerald-400 uppercase tracking-wide">
+                  Step 1: Send Payment via EasyPaisa
                 </div>
 
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-3 rounded-lg bg-zinc-900/90 border border-zinc-800">
+                <div className="flex items-center justify-between gap-3 p-3 rounded-lg bg-zinc-900 border border-zinc-800">
                   <div>
-                    <div className="text-[11px] text-zinc-400">EasyPaisa Account Number</div>
-                    <div className="text-lg font-extrabold text-white font-mono tracking-wider">
+                    <div className="text-[11px] text-zinc-400">EasyPaisa Account</div>
+                    <div className="text-base font-extrabold text-white font-mono tracking-wider">
                       {easyPaisaAccount}
                     </div>
-                    <div className="text-[11px] text-zinc-400">Title: Verified Account / Kainat</div>
+                    <div className="text-[10px] text-zinc-500">Account Title: Kainat / Verified</div>
                   </div>
 
                   <button
                     type="button"
                     onClick={handleCopyAccount}
-                    className="flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-xs font-medium text-emerald-400 border border-zinc-700 transition-colors shrink-0"
+                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-xs font-medium text-emerald-400 border border-zinc-700 transition-colors cursor-pointer shrink-0"
                   >
                     {copied ? (
                       <>
@@ -284,44 +239,26 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
                     ) : (
                       <>
                         <Copy className="w-3.5 h-3.5" />
-                        <span>Copy Number</span>
+                        <span>Copy</span>
                       </>
                     )}
                   </button>
                 </div>
 
-                <div className="text-[11px] text-zinc-400 space-y-1">
-                  <div>1. Send <strong className="text-emerald-400">Rs. {totalAmountPKR}</strong> to EasyPaisa <strong>{easyPaisaAccount}</strong>.</div>
-                  <div>2. Save payment screenshot and copy the 10-digit TRX ID.</div>
-                </div>
+                <p className="text-[11px] text-zinc-400">
+                  Transfer <strong className="text-emerald-400">Rs. {totalAmountPKR}</strong> to the account above and copy your 10-digit TRX ID.
+                </p>
               </div>
 
-              {/* Step 2: Form Inputs */}
-              <div className="space-y-4">
-                <div className="flex items-center justify-between">
-                  <span className="text-xs font-bold text-zinc-300 uppercase tracking-wide">
-                    Step 2: Enter Student Verification Details
-                  </span>
-                  <span className="text-[11px] text-emerald-400 font-semibold flex items-center gap-1">
-                    <ShieldCheck className="w-3.5 h-3.5" />
-                    <span>Multi-Device Sync Enabled</span>
-                  </span>
+              {/* Step 2: Student Details */}
+              <div className="space-y-3">
+                <div className="text-xs font-bold text-zinc-300 uppercase tracking-wide">
+                  Step 2: Enter Student Details
                 </div>
 
-                {/* Cross-Device Gmail Account Notice */}
-                <div className="p-3 bg-zinc-950 border border-zinc-800 rounded-xl flex items-start gap-2.5 text-xs">
-                  <Mail className="w-4 h-4 text-emerald-400 shrink-0 mt-0.5" />
-                  <div className="space-y-0.5">
-                    <div className="text-zinc-200 font-semibold">Cross-Device Permanent Access</div>
-                    <p className="text-[11px] text-zinc-400 leading-relaxed">
-                      Your purchased notes will be permanently linked to your Gmail. You can log into this same Gmail from your phone, laptop, or tablet at any time to read your notes.
-                    </p>
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  <div className="space-y-1.5">
-                    <label className="text-xs font-medium text-zinc-400">Student Full Name *</label>
+                <div className="space-y-3">
+                  <div>
+                    <label className="block text-xs font-medium text-zinc-400 mb-1">Full Name *</label>
                     <input
                       type="text"
                       required
@@ -332,98 +269,64 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
                     />
                   </div>
 
-                  <div className="space-y-1.5">
-                    <label className="text-xs font-medium text-zinc-400">Your Gmail Address (For Multi-Device Access) *</label>
+                  <div>
+                    <label className="block text-xs font-medium text-zinc-400 mb-1">Gmail Address (For Multi-Device Access) *</label>
                     <input
                       type="email"
                       required
                       value={studentEmail}
                       onChange={(e) => setStudentEmail(e.target.value)}
-                      placeholder="student@gmail.com"
+                      placeholder="e.g. ali@gmail.com"
                       className="w-full bg-zinc-900 border border-zinc-800 rounded-lg px-3 py-2 text-xs text-white placeholder-zinc-500 focus:outline-none focus:border-emerald-500"
                     />
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  <div className="space-y-1.5">
-                    <label className="text-xs font-medium text-zinc-400">Student WhatsApp Number *</label>
-                    <input
-                      type="tel"
-                      required
-                      value={studentPhone}
-                      onChange={(e) => setStudentPhone(e.target.value)}
-                      placeholder="e.g. 0324 1234567"
-                      className="w-full bg-zinc-900 border border-zinc-800 rounded-lg px-3 py-2 text-xs text-white placeholder-zinc-500 focus:outline-none focus:border-emerald-500"
-                    />
+                    <p className="text-[10px] text-zinc-500 mt-1">
+                      Notes will be permanently linked to this Gmail across all devices.
+                    </p>
                   </div>
 
-                  <div className="space-y-1.5">
-                    <label className="text-xs font-medium text-zinc-400">EasyPaisa Transaction ID (TRX ID) *</label>
-                    <input
-                      type="text"
-                      required
-                      value={trxId}
-                      onChange={(e) => setTrxId(e.target.value)}
-                      placeholder="e.g. 9845102931"
-                      className="w-full bg-zinc-900 border border-zinc-800 rounded-lg px-3 py-2 text-xs text-white font-mono placeholder-zinc-500 focus:outline-none focus:border-emerald-500"
-                    />
-                  </div>
-                </div>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-xs font-medium text-zinc-400 mb-1">WhatsApp Phone *</label>
+                      <input
+                        type="tel"
+                        required
+                        value={studentPhone}
+                        onChange={(e) => setStudentPhone(e.target.value)}
+                        placeholder="0300 1234567"
+                        className="w-full bg-zinc-900 border border-zinc-800 rounded-lg px-3 py-2 text-xs text-white placeholder-zinc-500 focus:outline-none focus:border-emerald-500"
+                      />
+                    </div>
 
-                {/* Screenshot Upload */}
-                <div className="space-y-1.5">
-                  <label className="text-xs font-medium text-zinc-400 flex items-center justify-between">
-                    <span>Payment Screenshot (Optional here, can also send directly on WhatsApp)</span>
-                    <span className="text-[11px] text-zinc-500">Max 5MB</span>
-                  </label>
-                  <label className="flex flex-col items-center justify-center border-2 border-dashed border-zinc-800 hover:border-zinc-700 bg-zinc-950/60 rounded-xl p-4 cursor-pointer transition-colors">
-                    <input
-                      type="file"
-                      accept="image/*"
-                      onChange={handleFileChange}
-                      className="hidden"
-                    />
-                    {screenshotPreview ? (
-                      <div className="space-y-2 text-center">
-                        <img
-                          src={screenshotPreview}
-                          alt="Screenshot preview"
-                          className="h-28 mx-auto rounded border border-zinc-700 object-contain"
-                        />
-                        <span className="text-[11px] text-emerald-400 font-semibold block">
-                          Screenshot Attached ✓ (Click to change)
-                        </span>
-                      </div>
-                    ) : (
-                      <div className="text-center space-y-1">
-                        <Upload className="w-5 h-5 text-zinc-500 mx-auto" />
-                        <span className="text-xs text-zinc-300 block">Click to upload EasyPaisa screenshot</span>
-                        <span className="text-[11px] text-zinc-500 block">PNG, JPG or JPEG</span>
-                      </div>
-                    )}
-                  </label>
+                    <div>
+                      <label className="block text-xs font-medium text-zinc-400 mb-1">EasyPaisa TRX ID *</label>
+                      <input
+                        type="text"
+                        required
+                        value={trxId}
+                        onChange={(e) => setTrxId(e.target.value)}
+                        placeholder="e.g. 8291048291"
+                        className="w-full bg-zinc-900 border border-zinc-800 rounded-lg px-3 py-2 text-xs text-white font-mono placeholder-zinc-500 focus:outline-none focus:border-emerald-500"
+                      />
+                    </div>
+                  </div>
                 </div>
               </div>
-
-              {errorMessage && (
-                <div className="p-3 rounded-lg bg-red-950/40 border border-red-900 text-xs text-red-300">
-                  {errorMessage}
-                </div>
-              )}
 
               {/* Submit Button */}
               <button
                 type="submit"
                 disabled={loading}
-                className="w-full flex items-center justify-center gap-2 py-3 px-4 bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white rounded-xl font-bold text-xs shadow-md transition-all active:scale-[0.99]"
+                className="w-full py-3 px-4 bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white font-bold text-xs rounded-xl shadow-lg shadow-emerald-950/40 transition-all flex items-center justify-center gap-2 cursor-pointer"
               >
                 {loading ? (
-                  <span>Processing Order...</span>
+                  <>
+                    <RefreshCw className="w-4 h-4 animate-spin" />
+                    <span>Submitting Order...</span>
+                  </>
                 ) : (
                   <>
-                    <span>Place Order & Connect to Kainat ({whatsAppNumber})</span>
-                    <ArrowRight className="w-4 h-4" />
+                    <ShieldCheck className="w-4 h-4" />
+                    <span>Submit Order for Verification</span>
                   </>
                 )}
               </button>

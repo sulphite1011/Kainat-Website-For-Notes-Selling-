@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { OrderNotificationAlert } from '../types';
-import { CheckCircle2, Sparkles, X, ArrowRight, Volume2 } from 'lucide-react';
+import { CheckCircle2, X, ArrowRight } from 'lucide-react';
 import { sound } from '../utils/soundEffects';
 
 interface RealtimeAlertBannerProps {
@@ -24,23 +24,21 @@ export const RealtimeAlertBanner: React.FC<RealtimeAlertBannerProps> = ({
         try {
           const parsed = JSON.parse(event.data);
           if (parsed.orderId) {
-            // It's a payment verification event!
             setActiveAlert(parsed);
             sound.playVerificationChime();
             onRefreshOrders();
 
-            // Auto dismiss after 10 seconds
             setTimeout(() => {
               setActiveAlert((current) => (current?.id === parsed.id ? null : current));
             }, 10000);
           }
         } catch {
-          // heartbeat or non-json
+          // heartbeat
         }
       };
 
       eventSource.onerror = () => {
-        // SSE will attempt auto-reconnect
+        // SSE reconnects automatically
       };
     } catch (e) {
       console.warn('SSE event stream error:', e);
@@ -64,32 +62,31 @@ export const RealtimeAlertBanner: React.FC<RealtimeAlertBannerProps> = ({
             <div>
               <div className="flex items-center gap-1.5">
                 <span className="text-xs font-bold text-emerald-400 uppercase tracking-wide">
-                  Automated Payment Alert
+                  Order Verified!
                 </span>
                 <span className="inline-block w-1.5 h-1.5 rounded-full bg-emerald-500 animate-ping"></span>
               </div>
               <h4 className="text-sm font-bold text-white mt-0.5">
-                Order #{activeAlert.orderId} Confirmed!
+                Order #{activeAlert.orderId} Confirmed
               </h4>
             </div>
           </div>
 
           <button
             onClick={() => setActiveAlert(null)}
-            className="text-zinc-400 hover:text-white p-1 rounded-lg hover:bg-zinc-800"
+            className="text-zinc-400 hover:text-white p-1 rounded-lg hover:bg-zinc-800 cursor-pointer"
           >
             <X className="w-4 h-4" />
           </button>
         </div>
 
         <p className="text-xs text-zinc-300 leading-relaxed">
-          Payment has been verified for <strong className="text-white">{activeAlert.studentName}</strong>. 
-          Your digital notes are now unlocked in the secure document reader!
+          {activeAlert.message}
         </p>
 
-        <div className="pt-1 flex items-center justify-between">
-          <span className="text-[11px] text-zinc-500 font-mono">
-            {new Date(activeAlert.verifiedAt).toLocaleTimeString()}
+        <div className="flex items-center justify-between pt-1">
+          <span className="text-[11px] text-zinc-400">
+            Amount: <strong className="text-emerald-400 font-mono">Rs. {activeAlert.totalAmountPKR}</strong>
           </span>
 
           <button
@@ -97,9 +94,9 @@ export const RealtimeAlertBanner: React.FC<RealtimeAlertBannerProps> = ({
               onOpenLibrary();
               setActiveAlert(null);
             }}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold shadow transition-colors"
+            className="inline-flex items-center gap-1 text-xs font-bold text-emerald-400 hover:text-emerald-300 transition-colors cursor-pointer"
           >
-            <span>Open in Library</span>
+            <span>Open Library</span>
             <ArrowRight className="w-3.5 h-3.5" />
           </button>
         </div>

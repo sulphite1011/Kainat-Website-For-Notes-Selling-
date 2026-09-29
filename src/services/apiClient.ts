@@ -1,21 +1,19 @@
-import { NoteItem, Order, OrderNotificationAlert, SiteSettings, StudentUser } from '../types';
+import { NoteItem, Order, SiteSettings, StudentUser } from '../types';
 import { initialNotesCatalog } from '../data/notesCatalog';
-import { seedNotes, seedOrders, seedNotifications, seedSettings } from '../data/seedData';
-import { generatePagesFromRawContent } from '../utils/notesFormatter';
 
-const SETTINGS_KEY = 'kainat_settings';
+const SETTINGS_KEY = 'kainat_notes_settings';
 const NOTES_KEY = 'kainat_notes_catalog';
-const ORDERS_KEY = 'kainat_orders';
-const NOTIFS_KEY = 'kainat_notifications';
+const ORDERS_KEY = 'kainat_orders_vault';
+const STUDENT_USER_KEY = 'kainat_student_user';
 
 export const defaultSettings: SiteSettings = {
-  ...seedSettings,
   siteName: 'Kainat Notes Hub',
   ownerName: 'Kainat',
   logoUrl: '',
   easyPaisaNumber: '03415892099',
   whatsAppNumber: '0324 9059918',
   ownerEmail: 'ka8984510@gmail.com',
+  clerkPublishableKey: '',
 };
 
 // --- Storage Helpers ---
@@ -42,17 +40,12 @@ export function getStoredNotes(): NoteItem[] {
     const raw = localStorage.getItem(NOTES_KEY);
     if (raw) {
       const parsed = JSON.parse(raw);
-      if (Array.isArray(parsed) && parsed.length > 0) {
-        return parsed;
-      }
+      if (Array.isArray(parsed) && parsed.length > 0) return parsed;
     }
   } catch {
     // ignore
   }
-  // Initialize with initial catalog (11 notes including BSc Thermodynamics)
-  const initial = initialNotesCatalog && initialNotesCatalog.length > 0 ? initialNotesCatalog : seedNotes;
-  saveStoredNotes(initial);
-  return initial;
+  return initialNotesCatalog;
 }
 
 export function saveStoredNotes(notes: NoteItem[]): void {
@@ -68,14 +61,12 @@ export function getStoredOrders(): Order[] {
     const raw = localStorage.getItem(ORDERS_KEY);
     if (raw) {
       const parsed = JSON.parse(raw);
-      if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      if (Array.isArray(parsed)) return parsed;
     }
   } catch {
     // ignore
   }
-  // Initialize with verified seed orders (3 verified orders = Rs. 599 revenue)
-  saveStoredOrders(seedOrders);
-  return seedOrders;
+  return [];
 }
 
 export function saveStoredOrders(orders: Order[]): void {
@@ -86,919 +77,313 @@ export function saveStoredOrders(orders: Order[]): void {
   }
 }
 
-export function getStoredNotifications(): OrderNotificationAlert[] {
-  try {
-    const raw = localStorage.getItem(NOTIFS_KEY);
-    if (raw) {
-      const parsed = JSON.parse(raw);
-      if (Array.isArray(parsed) && parsed.length > 0) return parsed;
-    }
-  } catch {
-    // ignore
-  }
-  saveStoredNotifications(seedNotifications);
-  return seedNotifications;
-}
-
-export function saveStoredNotifications(notifs: OrderNotificationAlert[]): void {
-  try {
-    localStorage.setItem(NOTIFS_KEY, JSON.stringify(notifs));
-  } catch {
-    // ignore
-  }
-}
-
-// Safely execute a fetch call and return JSON only if valid JSON is returned
-async function safeFetchJson<T = any>(
-  url: string,
-  options?: RequestInit
-): Promise<{ ok: boolean; status: number; data?: T; isServerAvailable: boolean }> {
-  try {
-    const res = await fetch(url, options);
-    const contentType = res.headers.get('content-type') || '';
-
-    // If server returned an HTML page (like SPA index.html from Cloudflare Workers catchall), it's not a real API endpoint
-    if (!contentType.includes('application/json')) {
-      return { ok: false, status: res.status, isServerAvailable: false };
-    }
-
-    const data = await res.json();
-    return { ok: res.ok, status: res.status, data, isServerAvailable: true };
-  } catch {
-    return { ok: false, status: 0, isServerAvailable: false };
-  }
-}
-
-// ==========================================
-// RESILIENT API METHODS (Works on Node.js and Cloudflare Workers)
-// ==========================================
-
-export async function apiAdminLogin(usernameInput: string, passwordInput: string) {
-  const cleanUsername = usernameInput.trim();
-  const cleanPassword = passwordInput.trim();
-
-  // 1. Try server endpoint first
-  const serverResult = await safeFetchJson<{
-    success: boolean;
-    message?: string;
-    token?: string;
-    admin?: any;
-  }>('/api/admin/login', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ username: cleanUsername, password: cleanPassword }),
-  });
-
-  if (serverResult.isServerAvailable) {
-    if (serverResult.ok && serverResult.data?.success) {
-      try {
-        sessionStorage.setItem('kainat_admin_auth', 'true');
-        if (serverResult.data.token) {
-          sessionStorage.setItem('kainat_admin_token', serverResult.data.token);
-        }
-      } catch {
-        // ignore
-      }
-      return serverResult.data;
-    }
-    return {
-      success: false,
-      message: serverResult.data?.message || 'Invalid username or password.',
-    };
-  }
-
-  // 2. Server is offline, unreachable, or deployed on Cloudflare Workers static routing
-  // Verify credentials client-side with complete security
-  const isKainatUser = cleanUsername.toLowerCase() === 'kainat';
-  const isHamadPass = cleanPassword === 'HamadJani';
-
-  if (isKainatUser && isHamadPass) {
-    const token = `admin_tok_${Date.now()}_kainat_client_auth`;
-    try {
-      sessionStorage.setItem('kainat_admin_auth', 'true');
-      sessionStorage.setItem('kainat_admin_token', token);
-    } catch {
-      // ignore
-    }
-    return {
-      success: true,
-      message: 'Welcome Kainat! Admin portal authenticated successfully.',
-      token,
-      admin: {
-        username: 'Kainat',
-        role: 'owner',
-        email: getStoredSettings().ownerEmail,
-      },
-    };
-  }
-
-  return {
-    success: false,
-    message: 'Invalid credentials. Username or password incorrect.',
-  };
-}
-
-export async function apiGetNotes(): Promise<NoteItem[]> {
-  const result = await safeFetchJson<{ success: boolean; notes: NoteItem[] }>('/api/notes');
-  if (result.ok && result.data?.success && Array.isArray(result.data.notes) && result.data.notes.length > 0) {
-    // Sync with local storage
-    saveStoredNotes(result.data.notes);
-    return result.data.notes;
-  }
-  return getStoredNotes();
-}
-
-export async function apiSaveNote(noteData: Partial<NoteItem>, editNoteId?: string | null) {
-  // 1. Try server
-  let serverPromise: Promise<any> | null = null;
-  if (editNoteId) {
-    serverPromise = safeFetchJson(`/api/admin/notes/${editNoteId}`, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(noteData),
-    });
-  } else {
-    serverPromise = safeFetchJson('/api/admin/notes', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(noteData),
-    });
-  }
-
-  // Fire and forget or await server
-  try {
-    const serverRes = await serverPromise;
-    if (serverRes.ok && serverRes.data?.success && serverRes.data.note) {
-      // Sync local storage
-      const notes = getStoredNotes();
-      const updatedNotes = editNoteId
-        ? notes.map((n) => (n.id === editNoteId ? serverRes.data.note : n))
-        : [serverRes.data.note, ...notes];
-      saveStoredNotes(updatedNotes);
-      return serverRes.data;
-    }
-  } catch {
-    // fallback to local below
-  }
-
-  // 2. Client-side persistence fallback
-  const currentNotes = getStoredNotes();
-  let savedNote: NoteItem;
-
-  if (editNoteId) {
-    const existingIndex = currentNotes.findIndex((n) => n.id === editNoteId);
-    const existing = existingIndex !== -1 ? currentNotes[existingIndex] : null;
-
-    const topics = Array.isArray(noteData.topicsCovered)
-      ? noteData.topicsCovered
-      : typeof noteData.topicsCovered === 'string'
-      ? (noteData.topicsCovered as string).split(',').map((s) => s.trim()).filter(Boolean)
-      : existing?.topicsCovered || [];
-
-    const sampleLimit = noteData.previewPageLimit || existing?.previewPageLimit || 3;
-
-    const generatedPages = (noteData as any).rawTextContent
-      ? generatePagesFromRawContent(
-          (noteData as any).rawTextContent,
-          noteData.title || existing?.title || 'Note',
-          noteData.chapterTitle || existing?.chapterTitle || '',
-          noteData.classLevel || existing?.classLevel || '',
-          topics
-        )
-      : existing?.fullContentPages ||
-        generatePagesFromRawContent(
-          '',
-          noteData.title || existing?.title || 'Note',
-          noteData.chapterTitle || existing?.chapterTitle || '',
-          noteData.classLevel || existing?.classLevel || '',
-          topics
-        );
-
-    const previewSlices = generatedPages.slice(0, sampleLimit);
-
-    if (existingIndex !== -1) {
-      savedNote = {
-        ...currentNotes[existingIndex],
-        ...noteData,
-        id: editNoteId,
-        samplePdfUrl: noteData.samplePdfUrl !== undefined ? noteData.samplePdfUrl : currentNotes[existingIndex].samplePdfUrl || '',
-        googleDriveUrl: noteData.googleDriveUrl !== undefined ? noteData.googleDriveUrl : currentNotes[existingIndex].googleDriveUrl || '',
-        previewPageLimit: sampleLimit,
-        previewPages: previewSlices,
-        fullContentPages: (noteData as any).rawTextContent ? generatedPages : currentNotes[existingIndex].fullContentPages || generatedPages,
-      } as NoteItem;
-      currentNotes[existingIndex] = savedNote;
-    } else {
-      savedNote = {
-        id: editNoteId,
-        rating: 5.0,
-        reviewsCount: 1,
-        ...noteData,
-        samplePdfUrl: noteData.samplePdfUrl || '',
-        googleDriveUrl: noteData.googleDriveUrl || '',
-        previewPageLimit: sampleLimit,
-        previewPages: previewSlices,
-        fullContentPages: generatedPages,
-      } as NoteItem;
-      currentNotes.unshift(savedNote);
-    }
-  } else {
-    const newId = `note-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`;
-    const topics = Array.isArray(noteData.topicsCovered)
-      ? noteData.topicsCovered
-      : typeof noteData.topicsCovered === 'string'
-      ? (noteData.topicsCovered as string).split(',').map((s) => s.trim()).filter(Boolean)
-      : [];
-
-    const sampleLimit = noteData.previewPageLimit || 3;
-
-    const generatedPages = generatePagesFromRawContent(
-      (noteData as any).rawTextContent || '',
-      noteData.title || 'Untitled Note',
-      noteData.chapterTitle || '',
-      noteData.classLevel || 'Matric-9th',
-      topics
-    );
-
-    const previewSlices = generatedPages.slice(0, sampleLimit);
-
-    savedNote = {
-      id: newId,
-      title: noteData.title || 'Untitled Note',
-      classLevel: noteData.classLevel || 'Matric-9th',
-      subject: noteData.subject || 'Physics',
-      chapterNumber: Number(noteData.chapterNumber) || 1,
-      chapterTitle: noteData.chapterTitle || '',
-      description: noteData.description || '',
-      totalPages: (noteData as any).rawTextContent && (noteData as any).rawTextContent.trim()
-        ? generatedPages.length
-        : (Number(noteData.totalPages) || generatedPages.length || 20),
-      pricePKR: Number(noteData.pricePKR) || 199,
-      topicsCovered: topics,
-      samplePdfUrl: noteData.samplePdfUrl || '',
-      googleDriveUrl: noteData.googleDriveUrl || '',
-      previewPageLimit: sampleLimit,
-      coverImage: noteData.coverImage || '/images/matric_notes_cover_1790249191068.jpg',
-      previewPages: previewSlices,
-      fullContentPages: generatedPages,
-      rating: 4.9,
-      reviewsCount: 12,
-    };
-    currentNotes.unshift(savedNote);
-  }
-
-  saveStoredNotes(currentNotes);
-  return {
-    success: true,
-    message: editNoteId
-      ? `Note "${savedNote.title}" updated successfully!`
-      : `New Note "${savedNote.title}" created by Kainat!`,
-    note: savedNote,
-  };
-}
-
-export async function apiDeleteNote(id: string) {
-  // 1. Try server
-  try {
-    const serverRes = await safeFetchJson(`/api/admin/notes/${id}`, { method: 'DELETE' });
-    if (serverRes.ok && serverRes.data?.success) {
-      const filtered = getStoredNotes().filter((n) => n.id !== id);
-      saveStoredNotes(filtered);
-      return serverRes.data;
-    }
-  } catch {
-    // fallback
-  }
-
-  // 2. Client fallback
-  const filtered = getStoredNotes().filter((n) => n.id !== id);
-  saveStoredNotes(filtered);
-  return { success: true, message: 'Note deleted successfully.' };
-}
-
-export async function apiUploadImage(dataUrl: string, customName?: string): Promise<{ success: boolean; url: string; message: string }> {
-  // Try server first
-  try {
-    const serverRes = await safeFetchJson('/api/upload', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ dataUrl, fileName: customName || 'media_' + Date.now() }),
-    });
-
-    if (serverRes.ok && serverRes.data?.success && serverRes.data.url) {
-      return serverRes.data;
-    }
-  } catch {
-    // fallback
-  }
-
-  // In Cloudflare Workers or offline static mode, the dataUrl (base64 string) is 100% self-contained and serves directly as image src!
-  return {
-    success: true,
-    url: dataUrl,
-    message: 'Image uploaded and stored directly in your media library!',
-  };
-}
-
-export async function apiGetSettings(): Promise<SiteSettings> {
-  const result = await safeFetchJson<{ success: boolean; settings: SiteSettings }>('/api/settings');
-  if (result.ok && result.data?.success && result.data.settings) {
-    saveStoredSettings(result.data.settings);
-    return result.data.settings;
-  }
-  return getStoredSettings();
-}
-
-export async function apiSaveSettings(newSettings: Partial<SiteSettings>): Promise<{ success: boolean; settings: SiteSettings; message: string }> {
-  const merged = { ...getStoredSettings(), ...newSettings };
-  saveStoredSettings(merged);
-
-  try {
-    const serverRes = await safeFetchJson('/api/settings', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(merged),
-    });
-    if (serverRes.ok && serverRes.data?.success && serverRes.data.settings) {
-      saveStoredSettings(serverRes.data.settings);
-      return { success: true, settings: serverRes.data.settings, message: 'Settings saved successfully.' };
-    }
-  } catch {
-    // fallback
-  }
-
-  return { success: true, settings: merged, message: 'Settings saved successfully!' };
-}
-
-export async function apiGetOrders(): Promise<{ orders: Order[]; stats: any; notifications: OrderNotificationAlert[] }> {
-  const serverRes = await safeFetchJson('/api/admin/orders');
-  if (serverRes.ok && serverRes.data?.success) {
-    saveStoredOrders(serverRes.data.orders || []);
-    if (serverRes.data.notifications) {
-      saveStoredNotifications(serverRes.data.notifications);
-    }
-    return serverRes.data;
-  }
-
-  const storedOrders = getStoredOrders();
-  const storedNotifs = getStoredNotifications();
-
-  const totalRevenuePKR = storedOrders
-    .filter((o) => o.status === 'verified')
-    .reduce((sum, o) => sum + (o.totalAmountPKR || 0), 0);
-  const pendingCount = storedOrders.filter((o) => o.status === 'pending').length;
-  const verifiedCount = storedOrders.filter((o) => o.status === 'verified').length;
-
-  return {
-    orders: storedOrders,
-    stats: {
-      totalOrders: storedOrders.length,
-      pendingCount,
-      pendingOrders: pendingCount,
-      verifiedCount,
-      verifiedOrders: verifiedCount,
-      totalRevenuePKR,
-    },
-    notifications: storedNotifs,
-  };
-}
-
-export async function apiCreateOrder(orderInput: Partial<Order>): Promise<{ success: boolean; message: string; order: Order }> {
-  // Generate order id KN-xxxx
-  const orderId = `KN-${Math.floor(1000 + Math.random() * 9000)}`;
-  const newOrder: Order = {
-    id: orderId,
-    studentName: orderInput.studentName || 'Student',
-    studentEmail: orderInput.studentEmail || '',
-    studentPhone: orderInput.studentPhone || '',
-    noteIds: orderInput.noteIds || [],
-    noteTitles: orderInput.noteTitles || [],
-    totalAmountPKR: orderInput.totalAmountPKR || 0,
-    paymentMethod: orderInput.paymentMethod || 'easypaisa',
-    easypaisaAccount: orderInput.easypaisaAccount || '03415892099',
-    trxId: orderInput.trxId || '',
-    screenshotUrl: orderInput.screenshotUrl || '',
-    status: 'pending',
-    createdAt: new Date().toISOString(),
-  };
-
-  // Try server
-  try {
-    const serverRes = await safeFetchJson('/api/orders', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(newOrder),
-    });
-    if (serverRes.ok && serverRes.data?.success && serverRes.data.order) {
-      const orders = getStoredOrders();
-      saveStoredOrders([serverRes.data.order, ...orders]);
-      return serverRes.data;
-    }
-  } catch {
-    // fallback
-  }
-
-  // Local fallback
-  const currentOrders = getStoredOrders();
-  saveStoredOrders([newOrder, ...currentOrders]);
-
-  return {
-    success: true,
-    message: `Order #${newOrder.id} submitted successfully! Kainat will verify your EasyPaisa payment.`,
-    order: newOrder,
-  };
-}
-
-export async function apiVerifyOrder(orderId: string): Promise<{ success: boolean; message: string; order?: Order }> {
-  // Try server
-  try {
-    const serverRes = await safeFetchJson(`/api/admin/orders/${orderId}/verify`, { method: 'POST' });
-    if (serverRes.ok && serverRes.data?.success) {
-      const orders = getStoredOrders().map((o) => (o.id === orderId ? serverRes.data.order : o));
-      saveStoredOrders(orders);
-      return serverRes.data;
-    }
-  } catch {
-    // fallback
-  }
-
-  // Local update
-  const currentNotes = getStoredNotes();
-  const currentOrders = getStoredOrders();
-  const target = currentOrders.find((o) => o.id.toLowerCase() === orderId.toLowerCase());
-  if (!target) return { success: false, message: 'Order not found.' };
-
-  target.status = 'verified';
-  target.verifiedAt = new Date().toISOString();
-  target.accessToken = `tok_${target.id.toLowerCase()}_${Date.now()}`;
-
-  target.notesUnlocked = target.noteIds.map((nid) => {
-    const n = currentNotes.find((item) => item.id === nid);
-    return {
-      id: nid,
-      title: n?.title || nid,
-      classLevel: n?.classLevel || '',
-      subject: n?.subject || '',
-    };
-  });
-
-  saveStoredOrders(currentOrders);
-
-  // Add notification
-  const notifs = getStoredNotifications();
-  const newNotif: OrderNotificationAlert = {
-    id: 'notif-' + Date.now(),
-    orderId: target.id,
-    studentName: target.studentName,
-    studentEmail: target.studentEmail,
-    studentPhone: target.studentPhone,
-    totalAmountPKR: target.totalAmountPKR,
-    verifiedAt: target.verifiedAt,
-    message: `Payment verified for Order #${target.id} by Kainat. Access unlocked!`,
-  };
-  saveStoredNotifications([newNotif, ...notifs]);
-
-  return {
-    success: true,
-    message: `Payment verified for Order #${target.id}. Access token issued!`,
-    order: target,
-  };
-}
-
-export async function apiRejectOrder(orderId: string): Promise<{ success: boolean; message: string; order?: Order }> {
-  try {
-    const serverRes = await safeFetchJson(`/api/admin/orders/${orderId}/reject`, { method: 'POST' });
-    if (serverRes.ok && serverRes.data?.success) {
-      const orders = getStoredOrders().map((o) => (o.id === orderId ? serverRes.data.order : o));
-      saveStoredOrders(orders);
-      return serverRes.data;
-    }
-  } catch {
-    // fallback
-  }
-
-  const currentOrders = getStoredOrders();
-  const target = currentOrders.find((o) => o.id.toLowerCase() === orderId.toLowerCase());
-  if (!target) return { success: false, message: 'Order not found.' };
-
-  target.status = 'rejected';
-  saveStoredOrders(currentOrders);
-
-  return {
-    success: true,
-    message: `Order #${target.id} status set to rejected.`,
-    order: target,
-  };
-}
-
-export async function apiGrantCourse(orderId: string, noteId: string): Promise<{ success: boolean; message: string; order?: Order }> {
-  try {
-    const serverRes = await safeFetchJson(`/api/admin/orders/${orderId}/grant-course`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ noteId }),
-    });
-    if (serverRes.ok && serverRes.data?.success) {
-      const orders = getStoredOrders().map((o) => (o.id === orderId ? serverRes.data.order : o));
-      saveStoredOrders(orders);
-      return serverRes.data;
-    }
-  } catch {
-    // fallback
-  }
-
-  const currentOrders = getStoredOrders();
-  const currentNotes = getStoredNotes();
-  const target = currentOrders.find((o) => o.id.toLowerCase() === orderId.toLowerCase());
-  if (!target) return { success: false, message: 'Order not found.' };
-
-  if (!target.noteIds.includes(noteId)) {
-    target.noteIds.push(noteId);
-    const n = currentNotes.find((item) => item.id === noteId);
-    if (n && target.noteTitles) {
-      target.noteTitles.push(n.title);
-    }
-    saveStoredOrders(currentOrders);
-  }
-
-  return { success: true, message: `Course access granted to ${target.studentName}.`, order: target };
-}
-
-export async function apiRevokeCourse(orderId: string, noteId: string): Promise<{ success: boolean; message: string; order?: Order }> {
-  try {
-    const serverRes = await safeFetchJson(`/api/admin/orders/${orderId}/revoke-course`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ noteId }),
-    });
-    if (serverRes.ok && serverRes.data?.success) {
-      const orders = getStoredOrders().map((o) => (o.id === orderId ? serverRes.data.order : o));
-      saveStoredOrders(orders);
-      return serverRes.data;
-    }
-  } catch {
-    // fallback
-  }
-
-  const currentOrders = getStoredOrders();
-  const target = currentOrders.find((o) => o.id.toLowerCase() === orderId.toLowerCase());
-  if (!target) return { success: false, message: 'Order not found.' };
-
-  target.noteIds = target.noteIds.filter((nid) => nid !== noteId);
-  saveStoredOrders(currentOrders);
-
-  return { success: true, message: `Course access revoked for ${target.studentName}.`, order: target };
-}
-
-export async function apiLookupOrders(query: string): Promise<{ success: boolean; orders: Order[]; message?: string }> {
-  const clean = query.trim().toLowerCase();
-  try {
-    const serverRes = await safeFetchJson<{ success: boolean; orders?: Order[]; order?: Order }>(
-      `/api/orders/lookup?query=${encodeURIComponent(clean)}`
-    );
-    if (serverRes.ok && serverRes.data?.success) {
-      const orders = serverRes.data.orders || (serverRes.data.order ? [serverRes.data.order] : []);
-      if (orders.length > 0) {
-        return { success: true, orders };
-      }
-    }
-  } catch {
-    // fallback
-  }
-
-  const storedOrders = getStoredOrders();
-  const matched = storedOrders.filter(
-    (o) =>
-      o.id.toLowerCase() === clean ||
-      o.studentEmail.toLowerCase() === clean ||
-      o.studentPhone.replace(/[^0-9]/g, '').includes(clean.replace(/[^0-9]/g, '')) ||
-      (o.trxId && o.trxId.toLowerCase() === clean) ||
-      (o.accessToken && o.accessToken.toLowerCase() === clean)
-  );
-
-  if (matched.length > 0) {
-    return { success: true, orders: matched };
-  }
-
-  return {
-    success: false,
-    orders: [],
-    message: 'No orders found matching that Order ID, Email, Phone, or EasyPaisa Trx ID.',
-  };
-}
-
-export async function apiGetDatabaseStatus(): Promise<any> {
-  const serverRes = await safeFetchJson('/api/admin/database/status');
-  if (serverRes.ok && serverRes.data?.success) {
-    return serverRes.data;
-  }
-
-  const notes = getStoredNotes();
-  const orders = getStoredOrders();
-  const notifs = getStoredNotifications();
-  const settings = getStoredSettings();
-
-  return {
-    success: true,
-    storage: {
-      mode: 'Cloudflare Resilient / Browser Document Store (Active)',
-      dbFilePath: 'LocalStorage & Cloudflare Synchronized Cache',
-      dbSizeBytes: JSON.stringify({ notes, orders, notifs, settings }).length,
-      totalNotes: notes.length,
-      totalOrders: orders.length,
-      totalNotifications: notifs.length,
-      mediaStorageDir: 'public/images & Local Base64 Storage',
-      uploadedFilesCount: 4,
-      uploadsSizeBytes: 3416000,
-      mongoDbConnected: Boolean(settings.mongoDbUri && settings.mongoDbUri.startsWith('mongodb')),
-      mongoDbUriMasked: settings.mongoDbUri
-        ? settings.mongoDbUri.replace(/:([^:@]+)@/, ':••••••••@')
-        : 'Not configured (using local persistent collections)',
-    },
-  };
-}
-
-export async function apiTestMongo(uri: string): Promise<{ success: boolean; message: string; maskedUri?: string }> {
-  const clean = uri.trim();
-  if (!clean.startsWith('mongodb://') && !clean.startsWith('mongodb+srv://')) {
-    return {
-      success: false,
-      message: 'Invalid URI format. Must start with "mongodb://" or "mongodb+srv://"',
-    };
-  }
-
-  // Save to settings
-  const settings = getStoredSettings();
-  settings.mongoDbUri = clean;
-  saveStoredSettings(settings);
-
-  // Try server too
-  try {
-    const serverRes = await safeFetchJson('/api/admin/database/test-mongo', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ uri: clean }),
-    });
-    if (serverRes.ok && serverRes.data?.success) {
-      return serverRes.data;
-    }
-  } catch {
-    // fallback
-  }
-
-  return {
-    success: true,
-    message: 'MongoDB URI validated & saved! Collections (notes, orders, notifications) configured for sync.',
-    maskedUri: clean.replace(/:([^:@]+)@/, ':••••••••@'),
-  };
-}
-
-export function apiExportDatabaseBackup(): void {
-  const fullBackup = {
-    notes: getStoredNotes(),
-    orders: getStoredOrders(),
-    notifications: getStoredNotifications(),
-    settings: getStoredSettings(),
-    exportedAt: new Date().toISOString(),
-    source: 'Kainat Notes Hub Document Store',
-  };
-
-  const blob = new Blob([JSON.stringify(fullBackup, null, 2)], { type: 'application/json' });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = `kainat_notes_hub_backup_${Date.now()}.json`;
-  document.body.appendChild(a);
-  a.click();
-  document.body.removeChild(a);
-  URL.revokeObjectURL(url);
-}
-
-export async function apiRestoreDatabaseBackup(jsonData: any): Promise<{ success: boolean; message: string; stats?: any }> {
-  if (!jsonData || !Array.isArray(jsonData.notes)) {
-    return { success: false, message: 'Invalid backup format. Must contain notes array.' };
-  }
-
-  if (Array.isArray(jsonData.notes)) saveStoredNotes(jsonData.notes);
-  if (Array.isArray(jsonData.orders)) saveStoredOrders(jsonData.orders);
-  if (Array.isArray(jsonData.notifications)) saveStoredNotifications(jsonData.notifications);
-  if (jsonData.settings) saveStoredSettings(jsonData.settings);
-
-  // Try server sync
-  try {
-    await safeFetchJson('/api/admin/database/restore', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(jsonData),
-    });
-  } catch {
-    // ignore
-  }
-
-  return {
-    success: true,
-    message: 'Database restored successfully from backup!',
-    stats: { notes: jsonData.notes.length, orders: jsonData.orders?.length || 0 },
-  };
-}
-
-// ----------------------------------------------------
-// Student Authentication & Cross-Device Sync Helpers
-// ----------------------------------------------------
-const STUDENT_AUTH_KEY = 'kainat_student_auth';
-
 export function getStoredStudent(): StudentUser | null {
   try {
-    const raw = localStorage.getItem(STUDENT_AUTH_KEY);
-    return raw ? JSON.parse(raw) : null;
+    const raw = localStorage.getItem(STUDENT_USER_KEY);
+    if (raw) return JSON.parse(raw);
   } catch {
-    return null;
+    // ignore
   }
+  return null;
 }
 
 export function saveStoredStudent(student: StudentUser | null): void {
   try {
     if (student) {
-      localStorage.setItem(STUDENT_AUTH_KEY, JSON.stringify(student));
+      localStorage.setItem(STUDENT_USER_KEY, JSON.stringify(student));
     } else {
-      localStorage.removeItem(STUDENT_AUTH_KEY);
+      localStorage.removeItem(STUDENT_USER_KEY);
     }
   } catch {
     // ignore
   }
 }
 
-export async function apiStudentRequestCode(
-  email: string,
-  name?: string,
-  phone?: string
-): Promise<{ success: boolean; message: string; emailSent?: boolean; smtpNotConfigured?: boolean }> {
+// --- API Methods ---
+export async function apiGetSettings(): Promise<SiteSettings> {
   try {
-    const res = await safeFetchJson<{
-      success: boolean;
-      message: string;
-      emailSent?: boolean;
-      smtpNotConfigured?: boolean;
-    }>('/api/student/request-code', {
+    const res = await fetch('/api/settings');
+    if (res.ok) {
+      const data = await res.json();
+      if (data.success && data.settings) {
+        saveStoredSettings(data.settings);
+        if (data.settings.clerkPublishableKey) {
+          localStorage.setItem('kainat_clerk_pub_key', data.settings.clerkPublishableKey);
+        }
+        return data.settings;
+      }
+    }
+  } catch {
+    // fallback to cache
+  }
+  return getStoredSettings();
+}
+
+export async function apiSaveSettings(settings: SiteSettings): Promise<{ success: boolean; settings: SiteSettings }> {
+  try {
+    saveStoredSettings(settings);
+    const res = await fetch('/api/settings', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email, name, phone }),
+      body: JSON.stringify(settings),
     });
-    if (res.ok && res.data) return res.data;
-    if (res.data?.message) {
-      return { success: false, message: res.data.message };
+    if (res.ok) {
+      const data = await res.json();
+      if (data.success) {
+        saveStoredSettings(data.settings);
+        return data;
+      }
     }
   } catch {
     // ignore
   }
-  return {
-    success: true,
-    emailSent: false,
-    message: `Verification request initiated for ${email}. Please check your Gmail inbox or configure SMTP in Admin Settings.`,
-  };
+  return { success: true, settings };
 }
 
-export async function apiStudentVerifyLogin(
-  email: string,
-  code: string,
-  name?: string,
-  phone?: string
-): Promise<{ success: boolean; message: string; student?: StudentUser; orders?: Order[] }> {
-  const cleanEmail = email.trim().toLowerCase();
-  const cleanCode = (code || '').trim();
-
-  if (!cleanCode) {
-    return { success: false, message: 'Please enter the 6-digit verification code from your Gmail inbox.' };
-  }
-
+export async function apiGetNotes(): Promise<NoteItem[]> {
   try {
-    const res = await safeFetchJson<{
-      success: boolean;
-      message: string;
-      student: StudentUser;
-      orders: Order[];
-    }>('/api/student/verify-login', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email: cleanEmail, code: cleanCode, name, phone }),
-    });
-
-    if (res.ok && res.data && res.data.success) {
-      saveStoredStudent(res.data.student);
-      if (res.data.orders && res.data.orders.length > 0) {
-        const stored = getStoredOrders();
-        const mergedMap = new Map<string, Order>();
-        [...res.data.orders, ...stored].forEach((o) => mergedMap.set(o.id, o));
-        saveStoredOrders(Array.from(mergedMap.values()));
+    const res = await fetch('/api/notes');
+    if (res.ok) {
+      const data = await res.json();
+      if (data.success && Array.isArray(data.notes)) {
+        saveStoredNotes(data.notes);
+        return data.notes;
       }
-      return res.data;
-    } else if (res.data?.message) {
-      return { success: false, message: res.data.message };
     }
   } catch {
     // fallback
   }
-
-  return {
-    success: false,
-    message: 'Could not verify code. Please make sure you entered the exact 6 digits sent to your Gmail inbox.',
-  };
+  return getStoredNotes();
 }
 
-export async function apiStudentGoogleLogin(
-  credential?: string,
-  profile?: { email: string; name?: string; picture?: string }
-): Promise<{ success: boolean; message: string; student?: StudentUser; orders?: Order[] }> {
+export async function apiSaveNote(note: NoteItem): Promise<NoteItem> {
   try {
-    const res = await safeFetchJson<{
-      success: boolean;
-      message: string;
-      student: StudentUser;
-      orders: Order[];
-    }>('/api/student/google-login', {
+    const res = await fetch('/api/notes', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        credential,
-        email: profile?.email,
-        name: profile?.name,
-        picture: profile?.picture,
-      }),
+      body: JSON.stringify(note),
     });
-
-    if (res.ok && res.data && res.data.success) {
-      saveStoredStudent(res.data.student);
-      if (res.data.orders && res.data.orders.length > 0) {
-        const stored = getStoredOrders();
-        const mergedMap = new Map<string, Order>();
-        [...res.data.orders, ...stored].forEach((o) => mergedMap.set(o.id, o));
-        saveStoredOrders(Array.from(mergedMap.values()));
+    if (res.ok) {
+      const data = await res.json();
+      if (data.success && data.note) {
+        const current = getStoredNotes();
+        const updated = [data.note, ...current.filter((n) => n.id !== data.note.id)];
+        saveStoredNotes(updated);
+        return data.note;
       }
-      return res.data;
+    }
+  } catch {
+    // local fallback
+  }
+  const current = getStoredNotes();
+  const updated = [note, ...current.filter((n) => n.id !== note.id)];
+  saveStoredNotes(updated);
+  return note;
+}
+
+export async function apiUpdateNote(note: NoteItem): Promise<NoteItem> {
+  try {
+    const res = await fetch(`/api/notes/${note.id}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(note),
+    });
+    if (res.ok) {
+      const data = await res.json();
+      if (data.success && data.note) {
+        const current = getStoredNotes();
+        const updated = current.map((n) => (n.id === note.id ? data.note : n));
+        saveStoredNotes(updated);
+        return data.note;
+      }
+    }
+  } catch {
+    // local fallback
+  }
+  const current = getStoredNotes();
+  const updated = current.map((n) => (n.id === note.id ? note : n));
+  saveStoredNotes(updated);
+  return note;
+}
+
+export async function apiDeleteNote(id: string): Promise<boolean> {
+  try {
+    await fetch(`/api/notes/${id}`, { method: 'DELETE' });
+  } catch {
+    // ignore
+  }
+  const current = getStoredNotes();
+  saveStoredNotes(current.filter((n) => n.id !== id));
+  return true;
+}
+
+export async function apiGetOrders(): Promise<Order[]> {
+  try {
+    const res = await fetch('/api/orders');
+    if (res.ok) {
+      const data = await res.json();
+      if (data.success && Array.isArray(data.orders)) {
+        saveStoredOrders(data.orders);
+        return data.orders;
+      }
     }
   } catch {
     // fallback
   }
-
-  if (profile?.email) {
-    const fallbackStudent: StudentUser = {
-      email: profile.email.trim().toLowerCase(),
-      name: profile.name?.trim() || profile.email.split('@')[0],
-      verifiedAt: new Date().toISOString(),
-    };
-    saveStoredStudent(fallbackStudent);
-    const matchedOrders = getStoredOrders().filter(
-      (o) => o.studentEmail.toLowerCase() === fallbackStudent.email.toLowerCase()
-    );
-    return {
-      success: true,
-      message: `Signed in as ${fallbackStudent.email}`,
-      student: fallbackStudent,
-      orders: matchedOrders,
-    };
-  }
-
-  return { success: false, message: 'Google Sign-In was cancelled or failed.' };
+  return getStoredOrders();
 }
 
-export async function apiTestSmtp(config: {
-  smtpHost?: string;
-  smtpPort?: number;
-  smtpUser?: string;
-  smtpPass?: string;
-  smtpSenderEmail?: string;
-  testRecipient?: string;
-}): Promise<{ success: boolean; message: string }> {
+export async function apiCreateOrder(orderData: Partial<Order>): Promise<{ success: boolean; order: Order; message?: string }> {
   try {
-    const res = await safeFetchJson<{ success: boolean; message: string }>('/api/admin/test-smtp', {
+    const res = await fetch('/api/orders', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(config),
+      body: JSON.stringify(orderData),
     });
-    if (res.data) return res.data;
-  } catch (err: any) {
-    return { success: false, message: err?.message || 'Failed connecting to server.' };
+    if (res.ok) {
+      const data = await res.json();
+      if (data.success && data.order) {
+        const current = getStoredOrders();
+        saveStoredOrders([data.order, ...current]);
+        return data;
+      }
+    }
+  } catch {
+    // ignore
   }
-  return { success: false, message: 'Server did not respond to SMTP test.' };
+  const fakeOrder: Order = {
+    id: `KN-${Math.floor(1000 + Math.random() * 9000)}`,
+    studentName: orderData.studentName || 'Student',
+    studentEmail: orderData.studentEmail || 'student@gmail.com',
+    studentPhone: orderData.studentPhone || '03001234567',
+    noteIds: orderData.noteIds || [],
+    noteTitles: orderData.noteTitles || [],
+    totalAmountPKR: orderData.totalAmountPKR || 0,
+    paymentMethod: 'easypaisa',
+    easypaisaAccount: '03415892099',
+    trxId: orderData.trxId || '1234567890',
+    screenshotUrl: orderData.screenshotUrl || '',
+    status: 'pending',
+    createdAt: new Date().toISOString(),
+  };
+  const current = getStoredOrders();
+  saveStoredOrders([fakeOrder, ...current]);
+  return { success: true, order: fakeOrder };
+}
+
+export async function apiVerifyOrder(orderId: string): Promise<{ success: boolean; order: Order }> {
+  try {
+    const res = await fetch(`/api/orders/${orderId}/verify`, { method: 'PATCH' });
+    if (res.ok) {
+      const data = await res.json();
+      if (data.success && data.order) {
+        const current = getStoredOrders();
+        saveStoredOrders(current.map((o) => (o.id === orderId ? data.order : o)));
+        return data;
+      }
+    }
+  } catch {
+    // ignore
+  }
+  const current = getStoredOrders();
+  const order = current.find((o) => o.id === orderId);
+  if (order) {
+    order.status = 'verified';
+    order.verifiedAt = new Date().toISOString();
+    order.accessToken = `tok_${order.id.toLowerCase()}_access`;
+    saveStoredOrders([...current]);
+    return { success: true, order };
+  }
+  throw new Error('Order not found');
+}
+
+export async function apiRejectOrder(orderId: string): Promise<{ success: boolean; order: Order }> {
+  try {
+    const res = await fetch(`/api/orders/${orderId}/reject`, { method: 'PATCH' });
+    if (res.ok) {
+      const data = await res.json();
+      if (data.success) {
+        const current = getStoredOrders();
+        saveStoredOrders(current.map((o) => (o.id === orderId ? data.order : o)));
+        return data;
+      }
+    }
+  } catch {
+    // ignore
+  }
+  const current = getStoredOrders();
+  const order = current.find((o) => o.id === orderId);
+  if (order) {
+    order.status = 'rejected';
+    saveStoredOrders([...current]);
+    return { success: true, order };
+  }
+  throw new Error('Order not found');
+}
+
+export async function apiLookupOrders(query: string): Promise<{ success: boolean; orders: Order[] }> {
+  try {
+    const res = await fetch(`/api/orders/lookup/${encodeURIComponent(query)}`);
+    if (res.ok) {
+      const data = await res.json();
+      if (data.success) return data;
+    }
+  } catch {
+    // fallback
+  }
+  const current = getStoredOrders();
+  const q = query.toLowerCase().trim();
+  const matched = current.filter(
+    (o) =>
+      o.id.toLowerCase() === q ||
+      o.studentEmail.toLowerCase() === q ||
+      o.studentPhone.includes(q) ||
+      o.trxId.toLowerCase() === q
+  );
+  return { success: true, orders: matched };
 }
 
 export async function apiGetStudentOrders(email: string): Promise<Order[]> {
-  const clean = email.trim().toLowerCase();
   try {
-    const res = await safeFetchJson<{ success: boolean; orders: Order[] }>(
-      `/api/student/orders?email=${encodeURIComponent(clean)}`
-    );
-    if (res.ok && res.data?.success && Array.isArray(res.data.orders)) {
-      const stored = getStoredOrders();
-      const mergedMap = new Map<string, Order>();
-      [...res.data.orders, ...stored].forEach((o) => mergedMap.set(o.id, o));
-      const merged = Array.from(mergedMap.values());
-      saveStoredOrders(merged);
-      return res.data.orders;
+    const res = await fetch(`/api/orders/student/${encodeURIComponent(email)}`);
+    if (res.ok) {
+      const data = await res.json();
+      if (data.success && Array.isArray(data.orders)) return data.orders;
     }
   } catch {
     // fallback
   }
-  return getStoredOrders().filter((o) => o.studentEmail.toLowerCase() === clean);
+  const current = getStoredOrders();
+  const matched = current.filter(
+    (o) => o.studentEmail.toLowerCase() === email.toLowerCase().trim() && o.status === 'verified'
+  );
+  return matched;
 }
 
+export async function apiLoginAdmin(username: string, password: string): Promise<{ success: boolean; token?: string; message?: string }> {
+  try {
+    const res = await fetch('/api/admin/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username, password }),
+    });
+    const data = await res.json();
+    return data;
+  } catch (err: any) {
+    return { success: false, message: err.message || 'Login failed' };
+  }
+}
+
+export async function apiUploadFile(base64Data: string, prefix = 'upload'): Promise<{ success: boolean; url?: string; message?: string }> {
+  try {
+    const res = await fetch('/api/upload', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ base64Data, prefix }),
+    });
+    const data = await res.json();
+    return data;
+  } catch (err: any) {
+    return { success: false, message: err.message || 'Upload failed' };
+  }
+}

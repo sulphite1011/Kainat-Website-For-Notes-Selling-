@@ -13,13 +13,12 @@ dotenv.config();
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-const app = express();
+export const app = express();
 const PORT = process.env.PORT || 3000;
 const DATA_DIR = path.join(__dirname, 'data');
 const DB_PATH = path.join(DATA_DIR, 'db.json');
 const UPLOAD_DIR = path.join(__dirname, 'public', 'uploads');
 
-// Ensure data and uploads folders exist
 if (!fs.existsSync(DATA_DIR)) {
   fs.mkdirSync(DATA_DIR, { recursive: true });
 }
@@ -27,7 +26,6 @@ if (!fs.existsSync(UPLOAD_DIR)) {
   fs.mkdirSync(UPLOAD_DIR, { recursive: true });
 }
 
-// Low-overhead persistent JSON database mimicking MongoDB collections
 interface DatabaseSchema {
   notes: NoteItem[];
   orders: Order[];
@@ -38,10 +36,11 @@ interface DatabaseSchema {
 const defaultSettings: SiteSettings = {
   siteName: 'Kainat Notes Hub',
   ownerName: 'Kainat',
-  logoUrl: '', // empty defaults to demo stylized Kainat emblem
+  logoUrl: '',
   easyPaisaNumber: '03415892099',
   whatsAppNumber: '0324 9059918',
-  ownerEmail: 'ka8984510@gmail.com'
+  ownerEmail: 'ka8984510@gmail.com',
+  clerkPublishableKey: process.env.VITE_CLERK_PUBLISHABLE_KEY || process.env.CLERK_PUBLISHABLE_KEY || '',
 };
 
 function loadDatabase(): DatabaseSchema {
@@ -49,9 +48,11 @@ function loadDatabase(): DatabaseSchema {
     if (fs.existsSync(DB_PATH)) {
       const raw = fs.readFileSync(DB_PATH, 'utf-8');
       const parsed = JSON.parse(raw);
-      // Ensure settings exists
       if (!parsed.settings) {
         parsed.settings = defaultSettings;
+      }
+      if (!parsed.settings.clerkPublishableKey && (process.env.VITE_CLERK_PUBLISHABLE_KEY || process.env.CLERK_PUBLISHABLE_KEY)) {
+        parsed.settings.clerkPublishableKey = process.env.VITE_CLERK_PUBLISHABLE_KEY || process.env.CLERK_PUBLISHABLE_KEY;
       }
       return parsed;
     }
@@ -59,48 +60,11 @@ function loadDatabase(): DatabaseSchema {
     console.error('Error loading database, initializing fresh:', err);
   }
 
-  // Initial Seed
-  const sampleInitialOrder: Order = {
-    id: 'KN-8102',
-    studentName: 'Muhammad Hamza',
-    studentEmail: 'hamza.student@gmail.com',
-    studentPhone: '03041234567',
-    noteIds: ['mat9-phy-ch2'],
-    noteTitles: ['Kinematics & Equations of Motion (Topper Handwritten Notes)'],
-    totalAmountPKR: 199,
-    paymentMethod: 'easypaisa',
-    easypaisaAccount: '03415892099',
-    trxId: '8294102941',
-    status: 'verified',
-    createdAt: new Date(Date.now() - 3600000 * 2).toISOString(),
-    verifiedAt: new Date(Date.now() - 3600000).toISOString(),
-    accessToken: 'tok_kn8102_demo_access',
-    notesUnlocked: [
-      {
-        id: 'mat9-phy-ch2',
-        title: 'Kinematics & Equations of Motion (Topper Handwritten Notes)',
-        classLevel: 'Matric-9th',
-        subject: 'Physics'
-      }
-    ]
-  };
-
   const initialDb: DatabaseSchema = {
     notes: initialNotesCatalog,
-    orders: [sampleInitialOrder],
-    notifications: [
-      {
-        id: 'notif-1',
-        orderId: 'KN-8102',
-        studentName: 'Muhammad Hamza',
-        studentEmail: 'hamza.student@gmail.com',
-        studentPhone: '03041234567',
-        totalAmountPKR: 199,
-        verifiedAt: new Date(Date.now() - 3600000).toISOString(),
-        message: 'Payment verified successfully for Order KN-8102 by Kainat. Notes unlocked!'
-      }
-    ],
-    settings: defaultSettings
+    orders: [],
+    notifications: [],
+    settings: defaultSettings,
   };
 
   fs.writeFileSync(DB_PATH, JSON.stringify(initialDb, null, 2));
@@ -115,10 +79,8 @@ function saveDatabase(dbData: DatabaseSchema) {
   }
 }
 
-// In-memory active db instance
 let db = loadDatabase();
 
-// SSE Connected Clients for real-time automated alerts
 const sseClients: Response[] = [];
 
 function broadcastAlert(alert: OrderNotificationAlert) {
@@ -132,67 +94,73 @@ function broadcastAlert(alert: OrderNotificationAlert) {
   }
 }
 
-// Middlewares: Increase limit for base64 image and cover picture uploads
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ extended: true, limit: '50mb' }));
 
-// Serve uploaded files statically from /uploads
 app.use('/uploads', express.static(UPLOAD_DIR));
 
-// ----------------------------------------------------
-// Media Upload Engine: Saves image files to permanent server disk /uploads/
-// ----------------------------------------------------
+// Media Upload Engine
 app.post('/api/upload', (req: Request, res: Response) => {
   try {
-    const { dataUrl, fileName: customName } = req.body;
-    if (!dataUrl || typeof dataUrl !== 'string') {
-      return res.status(400).json({ success: false, message: 'No image data provided.' });
+    const { base64Data, filename, prefix } = req.body;
+    if (!base64Data) {
+      return res.status(400).json({ success: false, message: 'No file data received.' });
     }
 
-    // Extract format and base64 content
-    let mimeType = 'image/png';
-    let base64Data = dataUrl;
+    const matches = base64Data.match(/^data:([A-Za-z-+\/]+);base64,(.+)$/);
+    let buffer: Buffer;
+    let ext = '.png';
 
-    if (dataUrl.includes(';base64,')) {
-      const parts = dataUrl.split(';base64,');
-      const mimeMatch = parts[0].match(/:(.*?)$/);
-      if (mimeMatch) mimeType = mimeMatch[1];
-      base64Data = parts[1];
+    if (matches && matches.length === 3) {
+      const mime = matches[1];
+      if (mime.includes('jpeg') || mime.includes('jpg')) ext = '.jpg';
+      else if (mime.includes('png')) ext = '.png';
+      else if (mime.includes('webp')) ext = '.webp';
+      else if (mime.includes('svg')) ext = '.svg';
+      buffer = Buffer.from(matches[2], 'base64');
+    } else {
+      buffer = Buffer.from(base64Data, 'base64');
     }
 
-    const extension = mimeType.split('/')[1]?.replace('jpeg', 'jpg') || 'png';
-    const timestamp = Date.now();
-    const randomSuffix = Math.random().toString(36).substring(2, 7);
-    const cleanPrefix = (customName || 'media').replace(/[^a-zA-Z0-9_-]/g, '_').substring(0, 30);
-    const generatedFileName = `${cleanPrefix}_${timestamp}_${randomSuffix}.${extension}`;
-    const filePath = path.join(UPLOAD_DIR, generatedFileName);
+    const cleanPrefix = prefix ? prefix.replace(/[^a-zA-Z0-9_-]/g, '') : 'upload';
+    const uniqueName = `${cleanPrefix}_${Date.now()}_${Math.random().toString(36).substring(2, 7)}${ext}`;
+    const filePath = path.join(UPLOAD_DIR, uniqueName);
 
-    const buffer = Buffer.from(base64Data, 'base64');
     fs.writeFileSync(filePath, buffer);
 
-    const fileUrl = `/uploads/${generatedFileName}`;
-    return res.json({
+    const publicUrl = `/uploads/${uniqueName}`;
+    res.json({
       success: true,
-      message: 'Image uploaded and saved to server storage successfully!',
-      url: fileUrl,
-      fileName: generatedFileName,
-      sizeBytes: buffer.length
+      url: publicUrl,
+      filename: uniqueName,
     });
-  } catch (err) {
-    console.error('Upload error:', err);
-    return res.status(500).json({ success: false, message: 'Server error saving image.' });
+  } catch (error: any) {
+    res.status(500).json({ success: false, message: error.message || 'File upload failed.' });
   }
 });
 
-// ----------------------------------------------------
-// Public Settings & Info
-// ----------------------------------------------------
+// Settings & Config
 app.get('/api/settings', (_req: Request, res: Response) => {
-  res.json({ success: true, settings: db.settings });
+  const currentKey = db.settings.clerkPublishableKey || process.env.VITE_CLERK_PUBLISHABLE_KEY || process.env.CLERK_PUBLISHABLE_KEY || '';
+  res.json({
+    success: true,
+    settings: {
+      ...db.settings,
+      clerkPublishableKey: currentKey,
+    },
+  });
+});
+
+app.get('/api/clerk-key', (_req: Request, res: Response) => {
+  const currentKey = db.settings.clerkPublishableKey || process.env.VITE_CLERK_PUBLISHABLE_KEY || process.env.CLERK_PUBLISHABLE_KEY || '';
+  res.json({
+    success: true,
+    clerkPublishableKey: currentKey,
+  });
 });
 
 app.post('/api/settings', (req: Request, res: Response) => {
-  const { siteName, logoUrl, easyPaisaNumber, whatsAppNumber, ownerEmail, mongoDbUri, clerkPublishableKey, googleClientId } = req.body;
+  const { siteName, logoUrl, easyPaisaNumber, whatsAppNumber, ownerEmail, mongoDbUri, clerkPublishableKey, googleClientId, smtpHost, smtpPort, smtpUser, smtpPass, smtpSenderEmail } = req.body;
 
   if (siteName) db.settings.siteName = siteName;
   if (typeof logoUrl === 'string') db.settings.logoUrl = logoUrl;
@@ -200,1073 +168,265 @@ app.post('/api/settings', (req: Request, res: Response) => {
   if (whatsAppNumber) db.settings.whatsAppNumber = whatsAppNumber;
   if (ownerEmail) db.settings.ownerEmail = ownerEmail;
   if (typeof mongoDbUri === 'string') db.settings.mongoDbUri = mongoDbUri;
-  if (typeof clerkPublishableKey === 'string') (db.settings as any).clerkPublishableKey = clerkPublishableKey;
-  if (typeof googleClientId === 'string') (db.settings as any).googleClientId = googleClientId;
+  if (typeof clerkPublishableKey === 'string') db.settings.clerkPublishableKey = clerkPublishableKey.trim();
+  if (typeof googleClientId === 'string') db.settings.googleClientId = googleClientId;
+  if (smtpHost) db.settings.smtpHost = smtpHost;
+  if (smtpPort) db.settings.smtpPort = Number(smtpPort);
+  if (smtpUser) db.settings.smtpUser = smtpUser;
+  if (smtpPass) db.settings.smtpPass = smtpPass;
+  if (smtpSenderEmail) db.settings.smtpSenderEmail = smtpSenderEmail;
 
   saveDatabase(db);
-  res.json({ success: true, message: 'Settings and logo updated successfully.', settings: db.settings });
+  res.json({ success: true, message: 'Settings updated successfully.', settings: db.settings });
 });
 
-// ----------------------------------------------------
-// 1. Admin Authentication (Username: Kainat, Password: HamadJani)
-// ----------------------------------------------------
+// Admin Authentication (Kainat / HamadJani)
 app.post('/api/admin/login', (req: Request, res: Response) => {
   const { username, password } = req.body;
-
-  if (username === 'Kainat' && password === 'HamadJani') {
-    const token = `admin_tok_${Date.now()}_kainat_secret`;
+  if (
+    username &&
+    password &&
+    username.trim().toLowerCase() === 'kainat' &&
+    password.trim() === 'HamadJani'
+  ) {
+    const adminToken = `tok_admin_kainat_${Date.now()}`;
     return res.json({
       success: true,
-      message: 'Welcome Kainat! Admin portal authenticated.',
-      token,
-      admin: {
-        username: 'Kainat',
-        role: 'owner',
-        email: db.settings.ownerEmail
-      }
+      token: adminToken,
+      admin: { username: 'Kainat', role: 'owner' },
     });
   }
-
   return res.status(401).json({
     success: false,
-    message: 'Invalid credentials. Username or password incorrect.'
+    message: 'Invalid Admin credentials. Access denied.',
   });
 });
 
-// ----------------------------------------------------
-// 2. Admin Settings Update (Logo picture, Branding, MongoDB)
-// ----------------------------------------------------
-app.post('/api/admin/settings', (req: Request, res: Response) => {
-  const { siteName, logoUrl, easyPaisaNumber, whatsAppNumber, ownerEmail, mongoDbUri } = req.body;
-
-  if (siteName) db.settings.siteName = siteName;
-  if (typeof logoUrl === 'string') db.settings.logoUrl = logoUrl;
-  if (easyPaisaNumber) db.settings.easyPaisaNumber = easyPaisaNumber;
-  if (whatsAppNumber) db.settings.whatsAppNumber = whatsAppNumber;
-  if (ownerEmail) db.settings.ownerEmail = ownerEmail;
-  if (typeof mongoDbUri === 'string') db.settings.mongoDbUri = mongoDbUri;
-
-  saveDatabase(db);
-  res.json({ success: true, message: 'Settings and logo updated successfully.', settings: db.settings });
-});
-
-// ----------------------------------------------------
-// Database & Storage Management APIs (MongoDB & Local JSON Store)
-// ----------------------------------------------------
-app.get('/api/admin/database/status', (_req: Request, res: Response) => {
-  try {
-    let uploadsCount = 0;
-    let uploadsTotalSize = 0;
-    if (fs.existsSync(UPLOAD_DIR)) {
-      const files = fs.readdirSync(UPLOAD_DIR);
-      uploadsCount = files.length;
-      for (const file of files) {
-        try {
-          const stat = fs.statSync(path.join(UPLOAD_DIR, file));
-          uploadsTotalSize += stat.size;
-        } catch {
-          // ignore
-        }
-      }
-    }
-
-    let dbFileSize = 0;
-    if (fs.existsSync(DB_PATH)) {
-      dbFileSize = fs.statSync(DB_PATH).size;
-    }
-
-    res.json({
-      success: true,
-      storage: {
-        mode: 'Local MongoDB-Compliant Document Store (JSON)',
-        dbFilePath: 'data/db.json',
-        dbSizeBytes: dbFileSize,
-        totalNotes: db.notes.length,
-        totalOrders: db.orders.length,
-        totalNotifications: db.notifications.length,
-        mediaStorageDir: 'public/uploads',
-        uploadedFilesCount: uploadsCount,
-        uploadsSizeBytes: uploadsTotalSize,
-        mongoDbConnected: Boolean(db.settings.mongoDbUri && db.settings.mongoDbUri.startsWith('mongodb')),
-        mongoDbUriMasked: db.settings.mongoDbUri 
-          ? db.settings.mongoDbUri.replace(/:([^:@]+)@/, ':••••••••@') 
-          : 'Not configured (using local persistent collections)'
-      }
-    });
-  } catch (err) {
-    res.status(500).json({ success: false, message: 'Error querying database status' });
-  }
-});
-
-// Database Export
-app.get('/api/admin/database/export', (_req: Request, res: Response) => {
-  res.setHeader('Content-Type', 'application/json');
-  res.setHeader('Content-Disposition', `attachment; filename="kainat_notes_hub_backup_${Date.now()}.json"`);
-  res.send(JSON.stringify(db, null, 2));
-});
-
-// Database Restore
-app.post('/api/admin/database/restore', (req: Request, res: Response) => {
-  try {
-    const incomingData = req.body;
-    if (!incomingData || !Array.isArray(incomingData.notes)) {
-      return res.status(400).json({ success: false, message: 'Invalid backup format. Must contain notes array.' });
-    }
-
-    db = {
-      notes: incomingData.notes || db.notes,
-      orders: incomingData.orders || db.orders,
-      notifications: incomingData.notifications || db.notifications,
-      settings: incomingData.settings || db.settings
-    };
-
-    saveDatabase(db);
-    res.json({ success: true, message: 'Database restored successfully from backup!', stats: { notes: db.notes.length, orders: db.orders.length } });
-  } catch (err) {
-    res.status(500).json({ success: false, message: 'Failed to restore database.' });
-  }
-});
-
-// Test MongoDB URI Connection
-app.post('/api/admin/database/test-mongo', (req: Request, res: Response) => {
-  const { uri } = req.body;
-  if (!uri || typeof uri !== 'string') {
-    return res.status(400).json({ success: false, message: 'Please provide a valid MongoDB connection string.' });
-  }
-
-  const clean = uri.trim();
-  if (!clean.startsWith('mongodb://') && !clean.startsWith('mongodb+srv://')) {
-    return res.status(400).json({
-      success: false,
-      message: 'Invalid URI format. Must start with "mongodb://" or "mongodb+srv://"'
-    });
-  }
-
-  // Save URI to settings
-  db.settings.mongoDbUri = clean;
-  saveDatabase(db);
-
-  return res.json({
-    success: true,
-    message: 'MongoDB URI validated & saved! Collections (notes, orders, notifications) configured for sync.',
-    maskedUri: clean.replace(/:([^:@]+)@/, ':••••••••@')
-  });
-});
-
-// ----------------------------------------------------
-// 3. Notes Catalog (Public list)
-// ----------------------------------------------------
+// Notes Catalog
 app.get('/api/notes', (_req: Request, res: Response) => {
-  const sanitized = db.notes.map(n => ({
-    id: n.id,
-    title: n.title,
-    classLevel: n.classLevel,
-    subject: n.subject,
-    chapterNumber: n.chapterNumber,
-    chapterTitle: n.chapterTitle,
-    description: n.description,
-    totalPages: n.totalPages,
-    pricePKR: n.pricePKR,
-    isBundle: n.isBundle,
-    bundleNoteIds: n.bundleNoteIds,
-    rating: n.rating,
-    reviewsCount: n.reviewsCount,
-    topicsCovered: n.topicsCovered,
-    coverImage: n.coverImage,
-    previewPagesCount: n.previewPages?.length || 0,
-    previewPages: n.previewPages || [],
-    samplePdfUrl: n.samplePdfUrl || '',
-    googleDriveUrl: n.googleDriveUrl,
-    previewPageLimit: n.previewPageLimit || 3
-  }));
-  res.json({ success: true, notes: sanitized });
+  res.json({ success: true, notes: db.notes });
 });
 
-// ----------------------------------------------------
-// 4. Single Note Details (Strictly Scoped: Course is available ONLY to student who paid)
-// Supports cross-device authentication via studentEmail / Gmail
-// ----------------------------------------------------
-app.get('/api/notes/:id', (req: Request, res: Response) => {
-  const { id } = req.params;
-  const { accessToken, orderId, email, studentEmail } = req.query;
-  const targetEmail = ((email || studentEmail) as string)?.trim().toLowerCase();
-
-  const note = db.notes.find(n => n.id === id);
-  if (!note) {
-    return res.status(404).json({ success: false, message: 'Note not found' });
+app.post('/api/notes', (req: Request, res: Response) => {
+  const noteData: NoteItem = req.body;
+  if (!noteData.title || !noteData.classLevel || !noteData.subject) {
+    return res.status(400).json({ success: false, message: 'Missing required note parameters.' });
   }
 
-  let isAuthorized = false;
-  let unauthorizedPurchaserAttempt = false;
-  let authorizedStudent: { name: string; email: string; phone: string; orderId: string } | null = null;
-
-  // Function to verify if a given order includes this note
-  const checkOrderPurchasedNote = (order: Order): boolean => {
-    if (order.status !== 'verified') return false;
-    if (order.noteIds.includes(id)) return true;
-    // Check if it was part of a purchased bundle
-    const hasBundle = order.noteIds.some(bundleId => {
-      const bundle = db.notes.find(b => b.id === bundleId);
-      return bundle?.bundleNoteIds?.includes(id);
-    });
-    return hasBundle;
-  };
-
-  if (targetEmail) {
-    const studentOrders = db.orders.filter(o => o.studentEmail.toLowerCase() === targetEmail);
-    const payingOrder = studentOrders.find(o => checkOrderPurchasedNote(o));
-    if (payingOrder) {
-      isAuthorized = true;
-      authorizedStudent = {
-        name: payingOrder.studentName,
-        email: payingOrder.studentEmail,
-        phone: payingOrder.studentPhone,
-        orderId: payingOrder.id
-      };
-    } else if (studentOrders.length > 0) {
-      unauthorizedPurchaserAttempt = true;
-    }
-  }
-
-  if (!isAuthorized && accessToken && typeof accessToken === 'string') {
-    const matchingOrder = db.orders.find(o => o.accessToken === accessToken);
-    if (matchingOrder) {
-      if (checkOrderPurchasedNote(matchingOrder)) {
-        isAuthorized = true;
-        authorizedStudent = {
-          name: matchingOrder.studentName,
-          email: matchingOrder.studentEmail,
-          phone: matchingOrder.studentPhone,
-          orderId: matchingOrder.id
-        };
-      } else {
-        unauthorizedPurchaserAttempt = true;
-      }
-    }
-  } else if (!isAuthorized && orderId && typeof orderId === 'string') {
-    const matchingOrder = db.orders.find(o => o.id.toLowerCase() === orderId.toLowerCase());
-    if (matchingOrder) {
-      if (checkOrderPurchasedNote(matchingOrder)) {
-        isAuthorized = true;
-        authorizedStudent = {
-          name: matchingOrder.studentName,
-          email: matchingOrder.studentEmail,
-          phone: matchingOrder.studentPhone,
-          orderId: matchingOrder.id
-        };
-      } else {
-        unauthorizedPurchaserAttempt = true;
-      }
-    }
-  }
-
-  if (unauthorizedPurchaserAttempt) {
-    return res.status(403).json({
-      success: false,
-      message: 'Access Denied: You have not purchased this specific course or chapter. Access is restricted exclusively to students who paid for this note.',
-      isFullAccess: false
-    });
-  }
-
-  if (isAuthorized) {
-    // Deliver full readable content for secure viewer
-    return res.json({
-      success: true,
-      note,
-      isFullAccess: true,
-      studentData: authorizedStudent,
-      securityToken: `SEC-${Date.now()}`
-    });
-  }
-
-  // Deliver only preview sample
-  const previewData = {
-    ...note,
-    fullContentPages: [], // keep hidden until verified payment
-    isFullAccess: false
-  };
-  return res.json({ success: true, note: previewData, isFullAccess: false });
-});
-
-// ----------------------------------------------------
-// 5. Admin: Create New Note (Manual Class, Note Name, Unit, Topic, Cover Pic)
-// ----------------------------------------------------
-app.post('/api/admin/notes', (req: Request, res: Response) => {
-  const {
-    title,
-    classLevel,
-    subject,
-    chapterNumber,
-    chapterTitle,
-    topicsCovered,
-    description,
-    rawTextContent,
-    totalPages,
-    pricePKR,
-    samplePdfUrl,
-    googleDriveUrl,
-    previewPageLimit,
-    coverImage
-  } = req.body;
-
-  if (!title || !classLevel || !subject || !chapterTitle) {
-    return res.status(400).json({
-      success: false,
-      message: 'Please provide Note Name (title), Class Name (classLevel), Subject, and Unit/Chapter Title.'
-    });
-  }
-
-  // Parse topics
-  let topics: string[] = [];
-  if (Array.isArray(topicsCovered)) {
-    topics = topicsCovered;
-  } else if (typeof topicsCovered === 'string') {
-    topics = topicsCovered.split(',').map(t => t.trim()).filter(Boolean);
-  }
-
-  const newId = `note-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`;
-  const sampleLimit = Math.max(1, Number(previewPageLimit) || 3);
-
-  // Generate beautiful interactive pages from raw content or defaults
-  const generatedPages = generatePagesFromRawContent(
-    rawTextContent || '',
-    title.trim(),
-    chapterTitle.trim(),
-    classLevel.trim(),
-    topics
-  );
-
-  const previewPages = generatedPages.slice(0, sampleLimit);
-
-  const newNote: NoteItem = {
+  const newId = noteData.id || `note-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`;
+  const createdNote: NoteItem = {
+    ...noteData,
     id: newId,
-    title: title.trim(),
-    classLevel: classLevel.trim(),
-    subject: subject.trim(),
-    chapterNumber: Number(chapterNumber) || 1,
-    chapterTitle: chapterTitle.trim(),
-    description: description ? description.trim() : `Complete chapter source notes for ${classLevel} ${subject}.`,
-    totalPages: rawTextContent && rawTextContent.trim() ? generatedPages.length : (Number(totalPages) || generatedPages.length || 20),
-    pricePKR: Number(pricePKR) || 199,
-    rating: 5.0,
-    reviewsCount: 1,
-    topicsCovered: topics.length > 0 ? topics : ['Complete Unit Derivations', 'Board Solved Numericals', 'Important Formula Sheets'],
-    samplePdfUrl: (samplePdfUrl || '').trim() || '',
-    googleDriveUrl: (googleDriveUrl || '').trim() || '',
-    previewPageLimit: sampleLimit,
-    coverImage: coverImage || '',
-    previewPages,
-    fullContentPages: generatedPages
+    previewPages: noteData.previewPages && noteData.previewPages.length > 0
+      ? noteData.previewPages
+      : generatePagesFromRawContent(noteData.description || '', noteData.chapterTitle || 'Chapter 1', noteData.classLevel, noteData.subject),
+    fullContentPages: noteData.fullContentPages && noteData.fullContentPages.length > 0
+      ? noteData.fullContentPages
+      : generatePagesFromRawContent(noteData.description || '', noteData.chapterTitle || 'Chapter 1', noteData.classLevel, noteData.subject),
   };
 
-  db.notes.unshift(newNote);
+  db.notes.unshift(createdNote);
   saveDatabase(db);
-
-  res.status(201).json({
-    success: true,
-    message: `Note "${newNote.title}" created successfully by Kainat!`,
-    note: newNote
-  });
+  res.json({ success: true, note: createdNote });
 });
 
-// ----------------------------------------------------
-// 6. Admin: Update Existing Note
-// ----------------------------------------------------
-app.put('/api/admin/notes/:id', (req: Request, res: Response) => {
+app.put('/api/notes/:id', (req: Request, res: Response) => {
   const { id } = req.params;
-  const noteIndex = db.notes.findIndex(n => n.id === id);
-
-  if (noteIndex === -1) {
+  const index = db.notes.findIndex((n) => n.id === id);
+  if (index === -1) {
     return res.status(404).json({ success: false, message: 'Note not found.' });
   }
 
-  const existing = db.notes[noteIndex];
-  const {
-    title,
-    classLevel,
-    subject,
-    chapterNumber,
-    chapterTitle,
-    topicsCovered,
-    description,
-    rawTextContent,
-    totalPages,
-    pricePKR,
-    samplePdfUrl,
-    googleDriveUrl,
-    previewPageLimit,
-    coverImage
-  } = req.body;
-
-  if (title) existing.title = title.trim();
-  if (classLevel) existing.classLevel = classLevel.trim();
-  if (subject) existing.subject = subject.trim();
-  if (chapterNumber !== undefined) existing.chapterNumber = Number(chapterNumber);
-  if (chapterTitle) existing.chapterTitle = chapterTitle.trim();
-  if (description) existing.description = description.trim();
-  if (totalPages !== undefined) existing.totalPages = Number(totalPages);
-  if (pricePKR !== undefined) existing.pricePKR = Number(pricePKR);
-  if (samplePdfUrl !== undefined) existing.samplePdfUrl = samplePdfUrl.trim();
-  if (googleDriveUrl !== undefined) existing.googleDriveUrl = googleDriveUrl.trim();
-  if (coverImage !== undefined) existing.coverImage = coverImage;
-  if (previewPageLimit !== undefined) existing.previewPageLimit = Math.max(1, Number(previewPageLimit) || 3);
-
-  if (topicsCovered) {
-    if (Array.isArray(topicsCovered)) {
-      existing.topicsCovered = topicsCovered;
-    } else if (typeof topicsCovered === 'string') {
-      existing.topicsCovered = topicsCovered.split(',').map(t => t.trim()).filter(Boolean);
-    }
-  }
-
-  const sampleLimit = existing.previewPageLimit || 3;
-
-  if (rawTextContent && typeof rawTextContent === 'string' && rawTextContent.trim()) {
-    const updatedPages = generatePagesFromRawContent(
-      rawTextContent,
-      existing.title,
-      existing.chapterTitle,
-      existing.classLevel,
-      existing.topicsCovered || []
-    );
-    existing.fullContentPages = updatedPages;
-    existing.previewPages = updatedPages.slice(0, sampleLimit);
-    if (!totalPages) {
-      existing.totalPages = updatedPages.length;
-    }
-  } else if (existing.fullContentPages && existing.fullContentPages.length > 0) {
-    existing.previewPages = existing.fullContentPages.slice(0, sampleLimit);
-  }
-
-  db.notes[noteIndex] = existing;
+  const updatedNote = { ...db.notes[index], ...req.body, id };
+  db.notes[index] = updatedNote;
   saveDatabase(db);
-
-  res.json({
-    success: true,
-    message: `Note "${existing.title}" updated successfully!`,
-    note: existing
-  });
+  res.json({ success: true, note: updatedNote });
 });
 
-// ----------------------------------------------------
-// 7. Admin: Delete Note
-// ----------------------------------------------------
-app.delete('/api/admin/notes/:id', (req: Request, res: Response) => {
+app.delete('/api/notes/:id', (req: Request, res: Response) => {
   const { id } = req.params;
-  const initialLen = db.notes.length;
-  db.notes = db.notes.filter(n => n.id !== id);
-
-  if (db.notes.length === initialLen) {
-    return res.status(404).json({ success: false, message: 'Note not found.' });
-  }
-
+  db.notes = db.notes.filter((n) => n.id !== id);
   saveDatabase(db);
   res.json({ success: true, message: 'Note deleted successfully.' });
 });
 
-// ----------------------------------------------------
-// 8. Create new order upon EasyPaisa checkout
-// ----------------------------------------------------
+// Orders
+app.get('/api/orders', (_req: Request, res: Response) => {
+  res.json({ success: true, orders: db.orders });
+});
+
 app.post('/api/orders', (req: Request, res: Response) => {
-  const { studentName, studentEmail, studentPhone, noteIds, trxId, screenshotUrl } = req.body;
+  const { studentName, studentEmail, studentPhone, noteIds, noteTitles, totalAmountPKR, paymentMethod, easypaisaAccount, trxId, screenshotUrl } = req.body;
 
-  if (!studentName || !studentEmail || !studentPhone || !noteIds || !Array.isArray(noteIds) || noteIds.length === 0) {
-    return res.status(400).json({ success: false, message: 'Please provide all required fields including selected notes.' });
+  if (!studentName || !studentEmail || !studentPhone || !trxId) {
+    return res.status(400).json({ success: false, message: 'Please provide all student and transaction details.' });
   }
-
-  if (!trxId || trxId.trim().length < 5) {
-    return res.status(400).json({ success: false, message: 'Please enter a valid EasyPaisa Transaction ID (TRX ID).' });
-  }
-
-  // Calculate total
-  const selectedNotes = db.notes.filter(n => noteIds.includes(n.id));
-  const totalAmountPKR = selectedNotes.reduce((acc, curr) => acc + curr.pricePKR, 0);
-
-  const orderId = `KN-${Math.floor(1000 + Math.random() * 9000)}`;
 
   const newOrder: Order = {
-    id: orderId,
+    id: `KN-${Math.floor(1000 + Math.random() * 9000)}`,
     studentName: studentName.trim(),
     studentEmail: studentEmail.trim().toLowerCase(),
     studentPhone: studentPhone.trim(),
-    noteIds,
-    noteTitles: selectedNotes.map(n => n.title),
-    totalAmountPKR,
-    paymentMethod: 'easypaisa',
-    easypaisaAccount: db.settings.easyPaisaNumber,
+    noteIds: noteIds || [],
+    noteTitles: noteTitles || [],
+    totalAmountPKR: Number(totalAmountPKR) || 0,
+    paymentMethod: paymentMethod || 'easypaisa',
+    easypaisaAccount: easypaisaAccount || db.settings.easyPaisaNumber,
     trxId: trxId.trim(),
     screenshotUrl: screenshotUrl || '',
     status: 'pending',
-    createdAt: new Date().toISOString()
+    createdAt: new Date().toISOString(),
   };
 
   db.orders.unshift(newOrder);
   saveDatabase(db);
-
-  // Compose WhatsApp message link for the student to send screenshot to Kainat at 0324 9059918
-  const waPhone = '923249059918';
-  const waText = encodeURIComponent(
-    `Assalam o Alaikum Ma'am Kainat! I have sent EasyPaisa payment for my notes.\n\n` +
-    `*Order ID:* ${orderId}\n` +
-    `*Student Name:* ${newOrder.studentName}\n` +
-    `*Email:* ${newOrder.studentEmail}\n` +
-    `*Amount:* Rs. ${totalAmountPKR}\n` +
-    `*EasyPaisa TRX ID:* ${newOrder.trxId}\n\n` +
-    `Attaching payment screenshot here. Please verify on your website to unlock reading access!`
-  );
-  const whatsappUrl = `https://wa.me/${waPhone}?text=${waText}`;
-
-  res.status(201).json({
-    success: true,
-    message: 'Order created successfully. Please send your payment screenshot to WhatsApp.',
-    order: newOrder,
-    whatsappUrl
-  });
+  res.json({ success: true, order: newOrder });
 });
 
-// ----------------------------------------------------
-// 9. Lookup order status by ID or Email/Phone
-// ----------------------------------------------------
-app.get('/api/orders/lookup', (req: Request, res: Response) => {
-  const query = ((req.query.query as string) || '').trim().toLowerCase();
-  if (!query) {
-    return res.status(400).json({ success: false, message: 'Search query required.' });
-  }
-
-  const matchingOrders = db.orders.filter(o => 
-    o.id.toLowerCase() === query ||
-    o.studentEmail.toLowerCase() === query ||
-    o.studentPhone.includes(query) ||
-    o.trxId.toLowerCase() === query
-  );
-
-  res.json({ success: true, orders: matchingOrders });
-});
-
-// ----------------------------------------------------
-// 10. Get specific order by ID
-// ----------------------------------------------------
-app.get('/api/orders/:id', (req: Request, res: Response) => {
+// Verify Order (Admin Action)
+app.patch('/api/orders/:id/verify', (req: Request, res: Response) => {
   const { id } = req.params;
-  const order = db.orders.find(o => o.id.toLowerCase() === id.toLowerCase());
+  const order = db.orders.find((o) => o.id === id);
   if (!order) {
     return res.status(404).json({ success: false, message: 'Order not found.' });
   }
-  res.json({ success: true, order });
-});
-
-// ----------------------------------------------------
-// 10B. Email Dispatch (SMTP / Nodemailer) & Student Authentication
-// ----------------------------------------------------
-const studentVerificationCodes: Record<string, { code: string; expiresAt: number; name?: string; phone?: string }> = {};
-
-function getMailTransporter(settings: SiteSettings) {
-  const host = settings.smtpHost || process.env.SMTP_HOST || 'smtp.gmail.com';
-  const port = Number(settings.smtpPort || process.env.SMTP_PORT || 465);
-  const user = settings.smtpUser || process.env.SMTP_USER || settings.ownerEmail || 'ka8984510@gmail.com';
-  const pass = settings.smtpPass || process.env.SMTP_PASS || '';
-
-  if (!pass) {
-    return null;
-  }
-
-  return nodemailer.createTransport({
-    host,
-    port,
-    secure: port === 465,
-    auth: {
-      user,
-      pass,
-    },
-  });
-}
-
-async function sendVerificationEmail(
-  toEmail: string,
-  code: string,
-  studentName: string,
-  settings: SiteSettings
-): Promise<{ sent: boolean; error?: string }> {
-  const transporter = getMailTransporter(settings);
-  if (!transporter) {
-    return {
-      sent: false,
-      error: 'SMTP server is not configured in Admin Portal yet. Please configure your Gmail App Password in Admin Portal > Settings.',
-    };
-  }
-
-  const senderEmail = settings.smtpSenderEmail || settings.smtpUser || settings.ownerEmail || 'ka8984510@gmail.com';
-  const senderName = settings.siteName || 'Kainat Notes Hub';
-
-  const mailOptions = {
-    from: `"${senderName}" <${senderEmail}>`,
-    to: toEmail,
-    subject: `${code} is your Kainat Notes Hub verification code`,
-    text: `Assalam-o-Alaikum ${studentName || 'Student'},\n\nYour 6-digit verification code is: ${code}\n\nThis code will expire in 10 minutes.\nUse this code to sign in and read your purchased notes on any device.\n\nKainat Notes Hub Team`,
-    html: `
-      <div style="font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; max-width: 540px; margin: 0 auto; background: #ffffff; border: 1px solid #e2e8f0; border-radius: 16px; overflow: hidden; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);">
-        <div style="background: linear-gradient(135deg, #065f46 0%, #059669 100%); padding: 28px 24px; text-align: center; color: #ffffff;">
-          <h1 style="margin: 0; font-size: 22px; font-weight: 800; letter-spacing: -0.5px;">Kainat Notes Hub</h1>
-          <p style="margin: 6px 0 0; font-size: 13px; color: #a7f3d0; font-weight: 500;">Official Student Account Security Verification</p>
-        </div>
-        <div style="padding: 28px 24px; color: #334155;">
-          <p style="font-size: 15px; margin: 0 0 12px; font-weight: 600; color: #0f172a;">Assalam-o-Alaikum ${studentName ? studentName : 'Student'},</p>
-          <p style="font-size: 14px; line-height: 1.6; margin: 0 0 20px; color: #475569;">
-            We received a request to verify your Gmail account for access to your notes on <strong>Kainat Notes Hub</strong>. Use the 6-digit verification code below to complete your login:
-          </p>
-          <div style="text-align: center; margin: 24px 0;">
-            <div style="display: inline-block; background: #f0fdf4; border: 2px dashed #059669; border-radius: 12px; padding: 14px 32px;">
-              <span style="font-family: monospace, Courier, 'Courier New'; font-size: 36px; font-weight: 800; letter-spacing: 8px; color: #047857; text-align: center;">
-                ${code}
-              </span>
-            </div>
-            <p style="font-size: 12px; color: #64748b; margin: 8px 0 0;">Valid for 10 minutes · Do not share this code with anyone</p>
-          </div>
-          <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 12px 16px; margin: 20px 0; font-size: 12px; color: #64748b;">
-            <strong style="color: #334155;">💡 Multi-Device Access:</strong> Once logged in, any course verified for your email automatically unlocks on your mobile phone, laptop, or tablet.
-          </div>
-          <p style="font-size: 13px; color: #64748b; line-height: 1.5; margin: 0;">
-            If you did not request this login code, you can safely ignore this email.
-          </p>
-        </div>
-        <div style="background: #f8fafc; border-top: 1px solid #e2e8f0; padding: 16px 24px; text-align: center; font-size: 11px; color: #94a3b8;">
-          <p style="margin: 0;">Kainat Notes Hub &copy; ${new Date().getFullYear()} · Official Student Portal</p>
-          <p style="margin: 4px 0 0;">WhatsApp Support: +92 324 9059918</p>
-        </div>
-      </div>
-    `,
-  };
-
-  try {
-    await transporter.sendMail(mailOptions);
-    console.log(`[SMTP Success] Verification email delivered to ${toEmail}`);
-    return { sent: true };
-  } catch (err: any) {
-    console.error(`[SMTP Error] Failed sending verification email to ${toEmail}:`, err);
-    return { sent: false, error: err?.message || 'Failed to send email through SMTP.' };
-  }
-}
-
-// Request real 6-digit verification code sent directly to student's Gmail inbox
-app.post('/api/student/request-code', async (req: Request, res: Response) => {
-  const { email, name, phone } = req.body;
-  if (!email || typeof email !== 'string' || !email.includes('@')) {
-    return res.status(400).json({ success: false, message: 'Valid Gmail or email address is required.' });
-  }
-
-  const cleanEmail = email.trim().toLowerCase();
-  const existing = studentVerificationCodes[cleanEmail];
-
-  // Rate limit: prevent spamming email inbox (minimum 25 seconds between requests)
-  if (existing && Date.now() < existing.expiresAt - (9.5 * 60 * 1000)) {
-    return res.status(429).json({
-      success: false,
-      message: 'A verification code was recently sent to this Gmail. Please wait 25 seconds before requesting another code.',
-    });
-  }
-
-  // Generate real cryptographically random 6-digit code
-  const code = Math.floor(100000 + Math.random() * 900000).toString();
-  studentVerificationCodes[cleanEmail] = {
-    code,
-    expiresAt: Date.now() + 10 * 60 * 1000, // 10 minutes
-    name: name?.trim(),
-    phone: phone?.trim(),
-  };
-
-  // Dispatch real email to student's inbox
-  const result = await sendVerificationEmail(cleanEmail, code, name?.trim() || '', db.settings);
-
-  if (result.sent) {
-    return res.json({
-      success: true,
-      emailSent: true,
-      message: `A 6-digit verification code has been sent directly to your Gmail inbox (${cleanEmail}). Please check your Inbox and Spam folder.`,
-      email: cleanEmail,
-    });
-  }
-
-  // If SMTP is not yet configured by the owner in Admin Settings:
-  console.log(`[Student Auth Pending SMTP] Code for ${cleanEmail} generated: ${code}`);
-
-  // Also add an Admin Notification Alert so Kainat can see that student requested login
-  const alertRecord: OrderNotificationAlert = {
-    id: `notif-login-${Date.now()}`,
-    orderId: 'LOGIN-VERIFY',
-    studentName: name?.trim() || cleanEmail.split('@')[0],
-    studentEmail: cleanEmail,
-    studentPhone: phone?.trim() || '',
-    totalAmountPKR: 0,
-    verifiedAt: new Date().toISOString(),
-    message: `Student login requested by ${cleanEmail}. Verification Code: ${code}. (Configure SMTP in Admin Settings to deliver directly to student inbox automatically).`
-  };
-  db.notifications.unshift(alertRecord);
-  saveDatabase(db);
-  broadcastAlert(alertRecord);
-
-  // Return notification without leaking code to the student in UI
-  return res.json({
-    success: true,
-    emailSent: false,
-    smtpNotConfigured: true,
-    message: result.error || `Verification code generated for ${cleanEmail}. Please check your Gmail inbox or configure SMTP in Admin Settings.`,
-    email: cleanEmail,
-  });
-});
-
-// Verify login with real 6-digit OTP code received in student's Gmail
-app.post('/api/student/verify-login', (req: Request, res: Response) => {
-  const { email, code, name, phone } = req.body;
-  if (!email || typeof email !== 'string' || !email.includes('@')) {
-    return res.status(400).json({ success: false, message: 'Valid Gmail/Email is required.' });
-  }
-
-  const cleanEmail = email.trim().toLowerCase();
-  const stored = studentVerificationCodes[cleanEmail];
-
-  if (!stored) {
-    return res.status(400).json({
-      success: false,
-      message: 'No active verification code found for this Gmail. Please request a new code.',
-    });
-  }
-
-  if (Date.now() > stored.expiresAt) {
-    delete studentVerificationCodes[cleanEmail];
-    return res.status(400).json({
-      success: false,
-      message: 'Verification code has expired (10 minute limit). Please request a fresh code.',
-    });
-  }
-
-  const cleanCode = (code || '').trim();
-  if (cleanCode !== stored.code) {
-    return res.status(400).json({
-      success: false,
-      message: 'Incorrect verification code. Please check your Gmail inbox and enter the 6-digit code received.',
-    });
-  }
-
-  // Code matches! Clear OTP
-  delete studentVerificationCodes[cleanEmail];
-
-  // Find all previous orders for this student
-  const studentOrders = db.orders.filter(o => o.studentEmail.toLowerCase() === cleanEmail);
-  const studentName = name?.trim() || stored?.name || (studentOrders.length > 0 ? studentOrders[0].studentName : cleanEmail.split('@')[0]);
-  const studentPhone = phone?.trim() || stored?.phone || (studentOrders.length > 0 ? studentOrders[0].studentPhone : '');
-
-  res.json({
-    success: true,
-    message: 'Welcome! Student verified successfully.',
-    student: {
-      email: cleanEmail,
-      name: studentName,
-      phone: studentPhone,
-      verifiedAt: new Date().toISOString(),
-    },
-    orders: studentOrders,
-  });
-});
-
-// Google Sign-In verification endpoint (Google Identity Services / OAuth)
-app.post('/api/student/google-login', (req: Request, res: Response) => {
-  const { credential, email, name } = req.body;
-  
-  let verifiedEmail = (email || '').trim().toLowerCase();
-  let verifiedName = (name || '').trim();
-
-  // If Google credential JWT is provided, safely decode it
-  if (credential && typeof credential === 'string') {
-    try {
-      const parts = credential.split('.');
-      if (parts.length === 3) {
-        const payloadStr = Buffer.from(parts[1], 'base64').toString('utf-8');
-        const payload = JSON.parse(payloadStr);
-        if (payload.email) {
-          verifiedEmail = payload.email.trim().toLowerCase();
-          verifiedName = payload.name || verifiedName;
-        }
-      }
-    } catch (e) {
-      console.warn('Could not parse Google JWT payload:', e);
-    }
-  }
-
-  if (!verifiedEmail || !verifiedEmail.includes('@')) {
-    return res.status(400).json({ success: false, message: 'Google Sign-In failed to provide a valid email.' });
-  }
-
-  // Find all previous orders for this student
-  const studentOrders = db.orders.filter(o => o.studentEmail.toLowerCase() === verifiedEmail);
-  const finalName = verifiedName || (studentOrders.length > 0 ? studentOrders[0].studentName : verifiedEmail.split('@')[0]);
-  const studentPhone = studentOrders.length > 0 ? studentOrders[0].studentPhone : '';
-
-  res.json({
-    success: true,
-    message: `Signed in with Google as ${verifiedEmail}`,
-    student: {
-      email: verifiedEmail,
-      name: finalName,
-      phone: studentPhone,
-      verifiedAt: new Date().toISOString(),
-    },
-    orders: studentOrders,
-  });
-});
-
-// Test SMTP connection from Admin Portal
-app.post('/api/admin/test-smtp', async (req: Request, res: Response) => {
-  const { smtpHost, smtpPort, smtpUser, smtpPass, smtpSenderEmail, testRecipient } = req.body;
-  const tempSettings: SiteSettings = {
-    ...db.settings,
-    smtpHost,
-    smtpPort: Number(smtpPort) || 465,
-    smtpUser,
-    smtpPass,
-    smtpSenderEmail
-  };
-
-  const recipient = (testRecipient || tempSettings.ownerEmail || 'ka8984510@gmail.com').trim();
-  const testCode = Math.floor(100000 + Math.random() * 900000).toString();
-  const result = await sendVerificationEmail(recipient, testCode, 'Kainat (Admin Test)', tempSettings);
-
-  if (result.sent) {
-    res.json({
-      success: true,
-      message: `Test email successfully dispatched to ${recipient}! Check your inbox.`,
-    });
-  } else {
-    res.status(400).json({
-      success: false,
-      message: result.error || 'Failed to send test email. Check your host, port, email, and Google App Password.',
-    });
-  }
-});
-
-// Cross-device query to get all orders and courses purchased by this Gmail
-app.get('/api/student/orders', (req: Request, res: Response) => {
-  const email = ((req.query.email as string) || '').trim().toLowerCase();
-  if (!email) {
-    return res.status(400).json({ success: false, message: 'Student email required.' });
-  }
-
-  const studentOrders = db.orders.filter(o => o.studentEmail.toLowerCase() === email);
-  res.json({
-    success: true,
-    email,
-    orders: studentOrders,
-  });
-});
-
-// ----------------------------------------------------
-// 11. Admin: List all orders & system metrics
-// ----------------------------------------------------
-app.get('/api/admin/orders', (_req: Request, res: Response) => {
-  const totalRevenue = db.orders
-    .filter(o => o.status === 'verified')
-    .reduce((sum, o) => sum + o.totalAmountPKR, 0);
-
-  const pendingCount = db.orders.filter(o => o.status === 'pending').length;
-  const verifiedCount = db.orders.filter(o => o.status === 'verified').length;
-
-  res.json({
-    success: true,
-    stats: {
-      totalOrders: db.orders.length,
-      pendingCount,
-      verifiedCount,
-      totalRevenuePKR: totalRevenue
-    },
-    orders: db.orders,
-    notifications: db.notifications.slice(0, 25)
-  });
-});
-
-// ----------------------------------------------------
-// 12. Admin: Verify payment and grant reading access ONLY to this paying student
-// ----------------------------------------------------
-app.post('/api/admin/orders/:id/verify', (req: Request, res: Response) => {
-  const { id } = req.params;
-  const orderIndex = db.orders.findIndex(o => o.id.toLowerCase() === id.toLowerCase());
-  
-  if (orderIndex === -1) {
-    return res.status(404).json({ success: false, message: 'Order not found.' });
-  }
-
-  const order = db.orders[orderIndex];
-  const accessToken = `tok_${order.id.toLowerCase()}_${Math.random().toString(36).substring(2, 9)}`;
-  const verifiedAt = new Date().toISOString();
-
-  // Find all unlocked note details strictly for this student
-  const unlockedNotes = db.notes
-    .filter(n => order.noteIds.includes(n.id) || (order.noteIds.includes('bundle-fsc2-complete') && ['fsc2-phy-ch12', 'fsc2-math-ch2'].includes(n.id)))
-    .map(n => ({
-      id: n.id,
-      title: n.title,
-      classLevel: n.classLevel,
-      subject: n.subject
-    }));
 
   order.status = 'verified';
-  order.verifiedAt = verifiedAt;
-  order.accessToken = accessToken;
-  order.notesUnlocked = unlockedNotes;
+  order.verifiedAt = new Date().toISOString();
+  order.accessToken = `tok_${order.id.toLowerCase()}_access`;
 
-  db.orders[orderIndex] = order;
+  // Attach unlocked notes
+  const unlocked = db.notes
+    .filter((n) => order.noteIds.includes(n.id))
+    .map((n) => ({ id: n.id, title: n.title, classLevel: n.classLevel, subject: n.subject }));
+  order.notesUnlocked = unlocked;
 
-  // Create notification alert record
-  const alertRecord: OrderNotificationAlert = {
+  saveDatabase(db);
+
+  // Broadcast real-time SSE alert
+  const alert: OrderNotificationAlert = {
     id: `notif-${Date.now()}`,
     orderId: order.id,
     studentName: order.studentName,
     studentEmail: order.studentEmail,
     studentPhone: order.studentPhone,
     totalAmountPKR: order.totalAmountPKR,
-    verifiedAt,
-    message: `Payment verified by Kainat for ${order.studentName} (${order.id}). Notes unlocked exclusively for student!`
+    verifiedAt: order.verifiedAt,
+    message: `Payment verified for ${order.studentName} (${order.id}). Notes unlocked in reader!`,
   };
 
-  db.notifications.unshift(alertRecord);
-  saveDatabase(db);
+  db.notifications.unshift(alert);
+  broadcastAlert(alert);
 
-  // Broadcast real-time event
-  broadcastAlert(alertRecord);
-
-  // Pre-generate confirmation WhatsApp text Kainat can send to student
-  const studentCleanPhone = order.studentPhone.replace(/[^0-9]/g, '');
-  const targetStudentWa = studentCleanPhone.startsWith('0') 
-    ? `92${studentCleanPhone.substring(1)}` 
-    : studentCleanPhone.startsWith('92') 
-      ? studentCleanPhone 
-      : `92${studentCleanPhone}`;
-
-  const confirmWaText = encodeURIComponent(
-    `Dear ${order.studentName},\n` +
-    `Your EasyPaisa payment for Order #${order.id} has been *VERIFIED & CONFIRMED* by Kainat! 🎉\n\n` +
-    `Your purchased notes are now unlocked exclusively for your account in our Secure Document Viewer.\n` +
-    `Order ID: ${order.id}\n` +
-    `Status: Unlocked (Protected Dynamic Watermark)\n\n` +
-    `You can immediately read your notes on our website by entering your Order ID: ${order.id}.\n` +
-    `Thank you for studying with Kainat Notes Hub!`
-  );
-
-  const studentConfirmationWaUrl = `https://wa.me/${targetStudentWa}?text=${confirmWaText}`;
-
-  res.json({
-    success: true,
-    message: `Payment verified for Order ${order.id}. Real-time notification dispatched.`,
-    order,
-    studentConfirmationWaUrl
-  });
+  res.json({ success: true, order });
 });
 
-// ----------------------------------------------------
-// 13. Admin: Reject payment
-// ----------------------------------------------------
-app.post('/api/admin/orders/:id/reject', (req: Request, res: Response) => {
+// Reject Order
+app.patch('/api/orders/:id/reject', (req: Request, res: Response) => {
   const { id } = req.params;
-  const order = db.orders.find(o => o.id.toLowerCase() === id.toLowerCase());
+  const order = db.orders.find((o) => o.id === id);
   if (!order) {
     return res.status(404).json({ success: false, message: 'Order not found.' });
   }
 
   order.status = 'rejected';
   saveDatabase(db);
-
-  res.json({ success: true, message: `Order ${order.id} status set to rejected.`, order });
+  res.json({ success: true, order });
 });
 
-// ----------------------------------------------------
-// 14. Admin: Grant or Revoke specific course for student order
-// ----------------------------------------------------
-app.post('/api/admin/orders/:id/grant-course', (req: Request, res: Response) => {
-  const { id } = req.params;
-  const { noteId } = req.body;
-
-  const order = db.orders.find(o => o.id.toLowerCase() === id.toLowerCase());
-  if (!order) {
-    return res.status(404).json({ success: false, message: 'Order not found.' });
-  }
-
-  if (!order.noteIds.includes(noteId)) {
-    order.noteIds.push(noteId);
-    const targetNote = db.notes.find(n => n.id === noteId);
-    if (targetNote && order.noteTitles) {
-      order.noteTitles.push(targetNote.title);
-    }
-    saveDatabase(db);
-  }
-
-  res.json({ success: true, message: `Course access granted to ${order.studentName}.`, order });
+// Student Order Lookup
+app.get('/api/orders/lookup/:query', (req: Request, res: Response) => {
+  const q = req.params.query.trim().toLowerCase();
+  const matched = db.orders.filter(
+    (o) =>
+      o.id.toLowerCase() === q ||
+      o.studentEmail.toLowerCase() === q ||
+      o.studentPhone.includes(q) ||
+      o.trxId.toLowerCase() === q
+  );
+  res.json({ success: true, orders: matched });
 });
 
-app.post('/api/admin/orders/:id/revoke-course', (req: Request, res: Response) => {
-  const { id } = req.params;
-  const { noteId } = req.body;
-
-  const order = db.orders.find(o => o.id.toLowerCase() === id.toLowerCase());
-  if (!order) {
-    return res.status(404).json({ success: false, message: 'Order not found.' });
-  }
-
-  order.noteIds = order.noteIds.filter(nid => nid !== noteId);
-  saveDatabase(db);
-
-  res.json({ success: true, message: `Course access revoked for ${order.studentName}.`, order });
+app.get('/api/orders/student/:email', (req: Request, res: Response) => {
+  const email = req.params.email.trim().toLowerCase();
+  const matched = db.orders.filter(
+    (o) => o.studentEmail.toLowerCase() === email && o.status === 'verified'
+  );
+  res.json({ success: true, orders: matched });
 });
 
-// ----------------------------------------------------
-// 15. Real-Time Server-Sent Events (SSE) for automated notifications
-// ----------------------------------------------------
+// Real-Time Events (Server-Sent Events)
 app.get('/api/events', (req: Request, res: Response) => {
   res.setHeader('Content-Type', 'text/event-stream');
   res.setHeader('Cache-Control', 'no-cache');
   res.setHeader('Connection', 'keep-alive');
 
   sseClients.push(res);
-
-  // Send initial connection ACK
   res.write(`data: ${JSON.stringify({ type: 'connected', time: new Date().toISOString() })}\n\n`);
 
-  // Heartbeat to keep connection alive
-  const heartbeat = setInterval(() => {
-    try {
-      res.write(': heartbeat\n\n');
-    } catch {
-      clearInterval(heartbeat);
-    }
-  }, 25000);
-
   req.on('close', () => {
-    clearInterval(heartbeat);
-    const index = sseClients.indexOf(res);
-    if (index !== -1) {
-      sseClients.splice(index, 1);
-    }
+    const idx = sseClients.indexOf(res);
+    if (idx !== -1) sseClients.splice(idx, 1);
   });
 });
 
-// ----------------------------------------------------
-// 16. Vite Dev Server / Production Static Serving
-// ----------------------------------------------------
-async function startServer() {
-  if (process.env.NODE_ENV !== 'production') {
-    const { createServer } = await import('vite');
-    const vite = await createServer({
-      server: { middlewareMode: true },
-      appType: 'spa',
-    });
-    app.use(vite.middlewares);
-  } else {
-    app.use(express.static(path.join(__dirname, 'dist')));
-    app.get('*', (_req, res) => {
-      res.sendFile(path.join(__dirname, 'dist', 'index.html'));
-    });
+// Test SMTP
+app.post('/api/test-smtp', async (req: Request, res: Response) => {
+  const { smtpHost, smtpPort, smtpUser, smtpPass, testRecipient } = req.body;
+
+  if (!smtpHost || !smtpUser || !smtpPass) {
+    return res.status(400).json({ success: false, message: 'Missing SMTP credentials.' });
   }
 
+  try {
+    const transporter = nodemailer.createTransport({
+      host: smtpHost,
+      port: Number(smtpPort) || 465,
+      secure: Number(smtpPort) === 465,
+      auth: {
+        user: smtpUser,
+        pass: smtpPass.replace(/\s+/g, ''),
+      },
+      tls: {
+        rejectUnauthorized: false,
+      },
+    });
+
+    const info = await transporter.sendMail({
+      from: `"Kainat Notes Hub" <${smtpUser}>`,
+      to: testRecipient || smtpUser,
+      subject: '✅ Kainat Notes Hub — Email System Test',
+      html: `
+        <div style="font-family: sans-serif; padding: 20px; color: #1e293b;">
+          <h2>✅ SMTP Dispatch Successful</h2>
+          <p>Your outgoing Gmail SMTP credentials are confirmed working properly on Kainat Notes Hub.</p>
+        </div>
+      `,
+    });
+
+    res.json({ success: true, message: `Test email dispatched successfully to ${testRecipient || smtpUser}! Message ID: ${info.messageId}` });
+  } catch (err: any) {
+    res.status(500).json({ success: false, message: `SMTP test failed: ${err.message}` });
+  }
+});
+
+export default app;
+
+const isMainModule = process.argv[1] && (
+  process.argv[1].endsWith('server.ts') ||
+  process.argv[1].endsWith('server.js') ||
+  fileURLToPath(import.meta.url) === path.resolve(process.argv[1])
+);
+
+if (isMainModule) {
+  const distDir = path.join(__dirname, 'dist');
+  if (fs.existsSync(distDir)) {
+    app.use(express.static(distDir));
+    app.get('*', (_req: Request, res: Response) => {
+      res.sendFile(path.join(distDir, 'index.html'));
+    });
+  }
   app.listen(PORT, () => {
-    console.log(`Server running at http://0.0.0.0:${PORT}`);
+    console.log(`Kainat Notes Hub server running on port ${PORT}`);
   });
 }
-
-startServer();

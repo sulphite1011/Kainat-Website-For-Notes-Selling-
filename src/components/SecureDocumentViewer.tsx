@@ -1,22 +1,17 @@
-import React, { useState, useEffect, useRef } from 'react';
-import { NoteItem, NotePage } from '../types';
-import { 
-  X, 
-  ChevronLeft, 
-  ChevronRight, 
-  ZoomIn, 
-  ZoomOut, 
-  Shield, 
-  ShieldAlert, 
-  Maximize2, 
-  Minimize2, 
-  Sun, 
-  Moon, 
-  Lock,
+import React, { useState, useEffect } from 'react';
+import { NoteItem } from '../types';
+import {
+  X,
+  BookOpen,
+  ChevronLeft,
+  ChevronRight,
+  ShieldCheck,
+  FileText,
   ExternalLink,
-  BookOpen
+  ZoomIn,
+  ZoomOut,
 } from 'lucide-react';
-import { formatGoogleDrivePreviewUrl, isDriveOrPdfUrl, getDirectDriveViewUrl } from '../utils/driveUrlHelper';
+import { formatGoogleDrivePreviewUrl, getDirectDriveViewUrl } from '../utils/driveUrlHelper';
 
 interface SecureDocumentViewerProps {
   note: NoteItem;
@@ -34,206 +29,80 @@ export const SecureDocumentViewer: React.FC<SecureDocumentViewerProps> = ({
   studentData,
   onClose,
 }) => {
-  const [currentPageIndex, setCurrentPageIndex] = useState(0);
-  const [zoomLevel, setZoomLevel] = useState<number>(100);
-  const [viewMode, setViewMode] = useState<'reader' | 'drive'>('reader');
-  const [isFullscreen, setIsFullscreen] = useState(false);
-  const [isWindowBlurred, setIsWindowBlurred] = useState(false);
-  const [screenshotAttempted, setScreenshotAttempted] = useState(false);
-  const [themeMode, setThemeMode] = useState<'dark' | 'contrast'>('dark');
+  const [activePageIndex, setActivePageIndex] = useState(0);
+  const [viewMode, setViewMode] = useState<'text' | 'drive'>('drive');
+  const [zoomLevel, setZoomLevel] = useState(100);
 
-  const containerRef = useRef<HTMLDivElement>(null);
+  const pages = (note.fullContentPages && note.fullContentPages.length > 0)
+    ? note.fullContentPages
+    : (note.previewPages && note.previewPages.length > 0)
+    ? note.previewPages
+    : [];
 
-  // Combine preview & full content pages safely
-  const allPages: NotePage[] = (note.fullContentPages && note.fullContentPages.length > 0 
-    ? note.fullContentPages 
-    : note.previewPages) || [];
-  const activePage = allPages[currentPageIndex] || allPages[0];
+  const activePage = pages[activePageIndex] || null;
 
-  // 1. Anti-Screenshot & Screen Capture Detection via Window Blur & Visibility
   useEffect(() => {
-    const handleBlur = () => {
-      setIsWindowBlurred(true);
-    };
-
-    const handleFocus = () => {
-      setIsWindowBlurred(false);
-      setScreenshotAttempted(false);
-    };
-
-    const handleVisibilityChange = () => {
-      if (document.hidden) {
-        setIsWindowBlurred(true);
-      } else {
-        setIsWindowBlurred(false);
-      }
-    };
-
-    // Keyboard interception: PrintScreen, Ctrl+P, Ctrl+S, DevTools
     const handleKeyDown = (e: KeyboardEvent) => {
-      // PrintScreen / PrtScn key
-      if (e.key === 'PrintScreen' || e.code === 'PrintScreen') {
-        e.preventDefault();
-        setScreenshotAttempted(true);
-        setIsWindowBlurred(true);
-        try {
-          if (navigator.clipboard && navigator.clipboard.writeText) {
-            navigator.clipboard.writeText('PROTECTED CONTENT - KAINAT NOTES HUB');
-          }
-        } catch {
-          // ignore
-        }
-        return;
-      }
-
-      // Block Ctrl+P (Print)
-      if ((e.ctrlKey || e.metaKey) && (e.key === 'p' || e.key === 'P')) {
-        e.preventDefault();
-        setScreenshotAttempted(true);
-        return;
-      }
-
-      // Block Ctrl+S (Save)
-      if ((e.ctrlKey || e.metaKey) && (e.key === 's' || e.key === 'S')) {
-        e.preventDefault();
-        return;
-      }
-
-      // Block Ctrl+U (View Source)
-      if ((e.ctrlKey || e.metaKey) && (e.key === 'u' || e.key === 'U')) {
-        e.preventDefault();
-        return;
-      }
-
-      // Block F12 and devtools shortcuts
-      if (
-        e.key === 'F12' ||
-        ((e.ctrlKey || e.metaKey) && e.shiftKey && (e.key === 'I' || e.key === 'i' || e.key === 'C' || e.key === 'c' || e.key === 'J' || e.key === 'j'))
-      ) {
-        e.preventDefault();
-        return;
+      if (e.key === 'ArrowRight' && activePageIndex < pages.length - 1) {
+        setActivePageIndex((prev) => prev + 1);
+      } else if (e.key === 'ArrowLeft' && activePageIndex > 0) {
+        setActivePageIndex((prev) => prev - 1);
+      } else if (e.key === 'Escape') {
+        onClose();
       }
     };
-
-    window.addEventListener('blur', handleBlur);
-    window.addEventListener('focus', handleFocus);
-    document.addEventListener('visibilitychange', handleVisibilityChange);
     window.addEventListener('keydown', handleKeyDown);
-
-    return () => {
-      window.removeEventListener('blur', handleBlur);
-      window.removeEventListener('focus', handleFocus);
-      document.removeEventListener('visibilitychange', handleVisibilityChange);
-      window.removeEventListener('keydown', handleKeyDown);
-    };
-  }, []);
-
-  const toggleFullscreen = () => {
-    if (!document.fullscreenElement) {
-      containerRef.current?.requestFullscreen().catch(() => {});
-      setIsFullscreen(true);
-    } else {
-      document.exitFullscreen().catch(() => {});
-      setIsFullscreen(false);
-    }
-  };
-
-  const watermarkString = `KAINAT NOTES · LICENSED EXCLUSIVELY TO: ${studentData.name.toUpperCase()} (${studentData.email}) · WA: ${studentData.phone} · ORDER #${studentData.orderId} · UNAUTHORIZED SHARING PROHIBITED`;
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [activePageIndex, pages.length, onClose]);
 
   return (
-    <div
-      ref={containerRef}
-      onContextMenu={(e) => e.preventDefault()}
-      className={`fixed inset-0 z-50 flex flex-col bg-zinc-950 text-zinc-100 select-none ${
-        themeMode === 'contrast' ? 'bg-black' : 'bg-zinc-950'
-      }`}
-      style={{
-        userSelect: 'none',
-        WebkitUserSelect: 'none',
-      }}
-    >
-      {/* Top Security Banner & Controls */}
-      <header className="flex items-center justify-between px-4 sm:px-6 h-14 border-b border-zinc-800 bg-zinc-900/90 backdrop-blur z-20">
-        <div className="flex items-center gap-3">
-          <div className="flex items-center gap-1.5 text-xs font-semibold text-emerald-400 bg-emerald-950/60 px-2.5 py-1 rounded-md border border-emerald-800/60">
-            <Shield className="w-3.5 h-3.5 text-emerald-400" />
-            <span>Kainat Protected Reader</span>
+    <div className="fixed inset-0 z-50 flex flex-col bg-zinc-950 text-white select-none">
+      {/* Top Navbar */}
+      <header className="h-14 border-b border-zinc-800 bg-zinc-900/90 px-4 flex items-center justify-between gap-3 shrink-0">
+        <div className="flex items-center gap-3 min-w-0">
+          <div className="p-1.5 rounded-lg bg-emerald-500/20 text-emerald-400">
+            <BookOpen className="w-4 h-4" />
           </div>
-
-          <div className="hidden sm:block text-xs text-zinc-300 font-medium truncate max-w-md">
-            {note.title}
+          <div className="truncate">
+            <h2 className="text-sm font-bold text-white truncate">{note.title}</h2>
+            <div className="text-[11px] text-zinc-400 flex items-center gap-2">
+              <span>{note.classLevel.replace('-', ' ')}</span>
+              <span>·</span>
+              <span className="text-emerald-400 font-mono">Licensed to: {studentData.email}</span>
+            </div>
           </div>
         </div>
 
-        {/* Center Mode Switcher */}
-        <div className="flex items-center gap-1 bg-zinc-950 p-1 rounded-lg border border-zinc-800 text-xs">
-          <button
-            onClick={() => setViewMode('reader')}
-            className={`px-3 py-1 rounded-md transition-colors font-medium ${
-              viewMode === 'reader'
-                ? 'bg-zinc-800 text-white font-semibold'
-                : 'text-zinc-400 hover:text-white'
-            }`}
-          >
-            Digital Paginated Notes
-          </button>
-          <button
-            onClick={() => setViewMode('drive')}
-            className={`px-3 py-1 rounded-md transition-colors font-medium ${
-              viewMode === 'drive'
-                ? 'bg-zinc-800 text-white font-semibold'
-                : 'text-zinc-400 hover:text-white'
-            }`}
-          >
-            Google Drive Protected PDF
-          </button>
-        </div>
-
-        {/* Right Tools */}
         <div className="flex items-center gap-2">
-          {viewMode === 'reader' && (
-            <>
-              <div className="flex items-center gap-1 border-r border-zinc-800 pr-2">
-                <button
-                  onClick={() => setZoomLevel((z) => Math.max(75, z - 15))}
-                  className="p-1.5 text-zinc-400 hover:text-white rounded hover:bg-zinc-800"
-                  title="Zoom Out"
-                >
-                  <ZoomOut className="w-4 h-4" />
-                </button>
-                <span className="text-[11px] font-mono text-zinc-400 w-10 text-center">
-                  {zoomLevel}%
-                </span>
-                <button
-                  onClick={() => setZoomLevel((z) => Math.min(150, z + 15))}
-                  className="p-1.5 text-zinc-400 hover:text-white rounded hover:bg-zinc-800"
-                  title="Zoom In"
-                >
-                  <ZoomIn className="w-4 h-4" />
-                </button>
-              </div>
-
+          {/* Mode Switcher */}
+          <div className="flex bg-zinc-950 p-0.5 rounded-lg border border-zinc-800 text-xs">
+            <button
+              onClick={() => setViewMode('drive')}
+              className={`px-3 py-1 rounded-md font-semibold transition-colors cursor-pointer ${
+                viewMode === 'drive'
+                  ? 'bg-emerald-600 text-white shadow-sm'
+                  : 'text-zinc-400 hover:text-white'
+              }`}
+            >
+              PDF Document
+            </button>
+            {pages.length > 0 && (
               <button
-                onClick={() => setThemeMode((m) => (m === 'dark' ? 'contrast' : 'dark'))}
-                className="p-1.5 text-zinc-400 hover:text-white rounded hover:bg-zinc-800"
-                title="Toggle Contrast Mode"
+                onClick={() => setViewMode('text')}
+                className={`px-3 py-1 rounded-md font-semibold transition-colors cursor-pointer ${
+                  viewMode === 'text'
+                    ? 'bg-emerald-600 text-white shadow-sm'
+                    : 'text-zinc-400 hover:text-white'
+                }`}
               >
-                {themeMode === 'dark' ? <Moon className="w-4 h-4" /> : <Sun className="w-4 h-4 text-amber-400" />}
+                Paginated Reading
               </button>
-            </>
-          )}
-
-          <button
-            onClick={toggleFullscreen}
-            className="p-1.5 text-zinc-400 hover:text-white rounded hover:bg-zinc-800"
-            title="Toggle Fullscreen"
-          >
-            {isFullscreen ? <Minimize2 className="w-4 h-4" /> : <Maximize2 className="w-4 h-4" />}
-          </button>
+            )}
+          </div>
 
           <button
             onClick={onClose}
-            className="p-1.5 text-zinc-400 hover:text-white rounded hover:bg-zinc-800 ml-1"
+            className="p-2 rounded-lg text-zinc-400 hover:text-white hover:bg-zinc-800 transition-colors cursor-pointer"
             title="Close Viewer"
           >
             <X className="w-5 h-5" />
@@ -241,239 +110,137 @@ export const SecureDocumentViewer: React.FC<SecureDocumentViewerProps> = ({
         </div>
       </header>
 
-      {/* Main Document Reading Area */}
-      <div className="relative flex-1 overflow-hidden bg-zinc-950 flex flex-col items-center justify-center">
-        {/* Anti-Screen-Capture Obfuscation Blanket */}
-        {(isWindowBlurred || screenshotAttempted) && (
-          <div className="absolute inset-0 z-40 bg-zinc-950/95 backdrop-blur-2xl flex flex-col items-center justify-center p-6 text-center space-y-3">
-            <div className="p-3 bg-red-950/80 border border-red-800 rounded-full text-red-400">
-              <ShieldAlert className="w-8 h-8" />
-            </div>
-            <h3 className="text-lg font-bold text-white">Security Shield Activated</h3>
-            <p className="text-xs text-zinc-400 max-w-md">
-              Window focus lost or screen capture shortcut detected. To protect Kainat's intellectual property, content is obscured until the viewer is directly refocused.
-            </p>
-            <button
-              onClick={() => {
-                setIsWindowBlurred(false);
-                setScreenshotAttempted(false);
-              }}
-              className="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg text-xs font-semibold"
-            >
-              Resume Reading
-            </button>
-          </div>
-        )}
-
-        {/* Dynamic Multi-Angled Watermark Grid Overlay - strictly tied to paying student */}
-        <div className="pointer-events-none absolute inset-0 z-30 overflow-hidden flex flex-col justify-around opacity-15 select-none">
-          {[0, 1, 2, 3, 4, 5].map((rowIdx) => (
-            <div
-              key={rowIdx}
-              className="whitespace-nowrap font-mono text-[11px] sm:text-xs font-bold text-emerald-300 transform -rotate-12 translate-y-2 translate-x-4 animate-watermark-float"
-            >
-              {watermarkString} &nbsp; • &nbsp; {watermarkString}
+      {/* Main Viewport */}
+      <main className="relative flex-1 overflow-hidden bg-zinc-900/50 flex flex-col">
+        {/* Dynamic Watermark Overlay */}
+        <div className="absolute inset-0 pointer-events-none z-20 flex flex-col justify-around opacity-5 select-none text-zinc-100 font-mono text-xs overflow-hidden">
+          {Array.from({ length: 5 }).map((_, i) => (
+            <div key={i} className="flex justify-around transform -rotate-12 whitespace-nowrap">
+              <span>{studentData.name} ({studentData.email}) - Order #{studentData.orderId}</span>
+              <span>{studentData.name} ({studentData.email}) - Order #{studentData.orderId}</span>
             </div>
           ))}
         </div>
 
-        {/* View Mode 1: Integrated Paginated Digital Note Reader */}
-        {viewMode === 'reader' && (
-          <div className="w-full h-full overflow-y-auto p-4 sm:p-8 flex justify-center">
-            <div
-              className={`w-full max-w-3xl rounded-xl border border-zinc-800 p-6 sm:p-10 shadow-2xl space-y-6 transition-all duration-200 ${
-                themeMode === 'contrast' ? 'bg-black text-white border-zinc-700' : 'bg-zinc-900/90 text-zinc-100'
-              }`}
-              style={{
-                transform: `scale(${zoomLevel / 100})`,
-                transformOrigin: 'top center',
-              }}
-            >
-              {/* Note Page Header */}
-              <div className="border-b border-zinc-800 pb-4 flex items-center justify-between">
-                <div>
-                  <div className="text-xs font-semibold text-emerald-400 font-mono">
-                    Page {activePage.pageNumber} of {allPages.length}
-                  </div>
-                  <h2 className="text-xl font-bold mt-1 text-white">{activePage.title}</h2>
-                  <div className="text-xs text-zinc-400 mt-0.5">{activePage.section}</div>
-                </div>
-
-                <div className="text-right">
-                  <div className="text-[10px] text-zinc-500 uppercase tracking-wider">Class Level</div>
-                  <div className="text-xs font-semibold text-zinc-300">{note.classLevel}</div>
-                  <div className="text-xs text-emerald-400">{note.subject}</div>
-                </div>
-              </div>
-
-              {/* Key Concept Points */}
-              <div className="space-y-2">
-                <div className="text-xs font-semibold text-zinc-400 uppercase tracking-wider">
-                  Key Examination Points:
-                </div>
-                <ul className="space-y-1.5 text-xs text-zinc-200">
-                  {activePage.keyPoints.map((point, idx) => (
-                    <li key={idx} className="flex items-start gap-2">
-                      <span className="text-emerald-400 font-bold shrink-0">•</span>
-                      <span>{point}</span>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-
-              {/* Governing Formulas */}
-              {activePage.formulas && activePage.formulas.length > 0 && (
-                <div className="p-4 rounded-xl bg-zinc-950 border border-zinc-800 space-y-2">
-                  <div className="text-[11px] font-semibold text-teal-400 uppercase tracking-wide">
-                    Governing Equations & Formulas:
-                  </div>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs font-mono text-zinc-200">
-                    {activePage.formulas.map((form, i) => (
-                      <div key={i} className="bg-zinc-900/80 px-3 py-2 rounded-lg border border-zinc-800">
-                        {form}
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              {/* Solved Board Exam Questions */}
-              {activePage.boardQuestions && activePage.boardQuestions.length > 0 && (
-                <div className="p-4 rounded-xl bg-amber-950/20 border border-amber-900/50 space-y-2">
-                  <div className="text-[11px] font-semibold text-amber-400 uppercase tracking-wide">
-                    Past Board Exam Frequent Questions:
-                  </div>
-                  <ul className="text-xs text-amber-100/90 space-y-1.5">
-                    {activePage.boardQuestions.map((q, i) => (
-                      <li key={i} className="flex items-start gap-2">
-                        <span className="text-amber-400 font-bold">★</span>
-                        <span>{q}</span>
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              )}
-
-              {/* Comprehensive Formatted Content Excerpt */}
-              <div
-                className="text-xs leading-relaxed border-t border-zinc-800 pt-4 text-zinc-300 space-y-3"
-                dangerouslySetInnerHTML={{ __html: activePage.contentHtml }}
-              />
-
-              {/* Page Footer Watermark Indicator */}
-              <div className="border-t border-zinc-800 pt-4 flex items-center justify-between text-[11px] text-zinc-500 font-mono">
-                <span>Paying Student: {studentData.email}</span>
-                <span>Verified Order: #{studentData.orderId}</span>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* View Mode 2: Google Drive PDF Protected Viewport */}
+        {/* View Mode: Drive PDF */}
         {viewMode === 'drive' && (
-          <div className="relative w-full h-full flex flex-col items-center justify-center p-2 sm:p-4">
-            <div className="relative w-full max-w-5xl h-full rounded-xl overflow-hidden border border-zinc-800 bg-zinc-900 shadow-2xl flex flex-col">
-              {/* Top Banner with Open In Google Drive option */}
-              <div className="px-4 py-2.5 bg-zinc-950 border-b border-zinc-800 flex items-center justify-between text-xs shrink-0">
-                <div className="flex items-center gap-2 text-zinc-300">
-                  <BookOpen className="w-4 h-4 text-emerald-400" />
-                  <span className="font-semibold text-white truncate max-w-sm">{note.title}</span>
-                  <span className="text-[10px] px-1.5 py-0.5 rounded bg-emerald-950 text-emerald-300 border border-emerald-800 font-mono">
-                    PDF Document
-                  </span>
+          <div className="relative w-full h-full flex flex-col">
+            {note.googleDriveUrl || note.samplePdfUrl ? (
+              <>
+                <iframe
+                  src={formatGoogleDrivePreviewUrl(note.googleDriveUrl || note.samplePdfUrl)}
+                  title={note.title}
+                  className="w-full flex-1 border-0 bg-zinc-950"
+                  allow="autoplay"
+                  sandbox="allow-scripts allow-same-origin allow-popups"
+                />
+                <div className="px-4 py-2 bg-zinc-950 border-t border-zinc-800 text-xs text-zinc-400 flex items-center justify-between shrink-0">
+                  <span className="truncate">If the PDF doesn't display due to browser cookie settings:</span>
+                  <a
+                    href={getDirectDriveViewUrl(note.googleDriveUrl || note.samplePdfUrl)}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-emerald-400 font-semibold hover:underline flex items-center gap-1 shrink-0 ml-2"
+                  >
+                    <span>Open PDF in Google Drive Tab</span>
+                    <ExternalLink className="w-3.5 h-3.5" />
+                  </a>
                 </div>
-
-                <div className="flex items-center gap-3">
-                  {note.googleDriveUrl && (
-                    <a
-                      href={getDirectDriveViewUrl(note.googleDriveUrl)}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="flex items-center gap-1.5 px-3 py-1 bg-emerald-600 hover:bg-emerald-500 text-white rounded-md text-xs font-semibold shadow-sm transition-colors"
-                    >
-                      <span>Open Drive in New Tab</span>
-                      <ExternalLink className="w-3.5 h-3.5" />
-                    </a>
-                  )}
-                </div>
+              </>
+            ) : (
+              <div className="flex-1 flex flex-col items-center justify-center p-6 text-center space-y-3">
+                <FileText className="w-12 h-12 text-zinc-600" />
+                <h3 className="text-base font-bold text-white">Full Notes Unlocked</h3>
+                <p className="text-xs text-zinc-400 max-w-md">
+                  Your purchase is verified. Switch to the Paginated Reading tab above to view the complete study pages.
+                </p>
               </div>
+            )}
+          </div>
+        )}
 
-              {/* PDF Preview Frame */}
-              <div className="relative flex-1 w-full h-full bg-zinc-950 flex flex-col">
-                {note.googleDriveUrl ? (
-                  <>
-                    <iframe
-                      src={formatGoogleDrivePreviewUrl(note.googleDriveUrl)}
-                      title={note.title}
-                      className="w-full flex-1 border-0"
-                      allow="autoplay"
-                      sandbox="allow-scripts allow-same-origin allow-popups"
-                    />
-                    {/* Fallback bar if iframe is blocked by 3rd-party cookie policies */}
-                    <div className="px-4 py-1.5 bg-zinc-900 border-t border-zinc-800 text-[11px] text-zinc-400 flex items-center justify-between shrink-0">
-                      <span>Unable to load inside frame? (Google third-party cookie restriction)</span>
-                      <a
-                        href={getDirectDriveViewUrl(note.googleDriveUrl)}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="text-emerald-400 font-semibold hover:underline flex items-center gap-1"
-                      >
-                        <span>Click here to open PDF directly</span>
-                        <ExternalLink className="w-3 h-3" />
-                      </a>
-                    </div>
-                  </>
-                ) : (
-                  <div className="flex flex-col items-center justify-center h-full p-6 text-center space-y-3">
-                    <BookOpen className="w-12 h-12 text-zinc-600" />
-                    <h4 className="text-sm font-bold text-white">Google Drive PDF Document</h4>
-                    <p className="text-xs text-zinc-400 max-w-md">
-                      This course note is available in Google Drive format. You can switch to the "Digital Paginated Notes" tab to read all high-yield notes.
-                    </p>
+        {/* View Mode: Text Pages */}
+        {viewMode === 'text' && (
+          <div className="flex-1 overflow-y-auto p-4 sm:p-8 flex justify-center">
+            <div
+              className="w-full max-w-3xl bg-zinc-950 rounded-2xl border border-zinc-800 p-6 sm:p-10 shadow-2xl space-y-6 transition-transform"
+              style={{ transform: `scale(${zoomLevel / 100})`, transformOrigin: 'top center' }}
+            >
+              {activePage ? (
+                <>
+                  <div className="border-b border-zinc-800 pb-4">
+                    <span className="text-xs text-emerald-400 font-semibold">{activePage.section}</span>
+                    <h3 className="text-xl font-bold text-white mt-1">{activePage.title}</h3>
                   </div>
-                )}
-              </div>
 
-              {/* Watermark student footer */}
-              <div className="px-4 py-1.5 bg-zinc-950 border-t border-zinc-800 flex items-center justify-between text-[11px] text-zinc-500 font-mono shrink-0">
-                <span>Paying Student: {studentData.email}</span>
-                <span>Order Reference: #{studentData.orderId}</span>
-              </div>
+                  <div
+                    className="prose prose-invert max-w-none text-zinc-300 text-xs sm:text-sm leading-relaxed"
+                    dangerouslySetInnerHTML={{ __html: activePage.contentHtml }}
+                  />
+
+                  {activePage.keyPoints && activePage.keyPoints.length > 0 && (
+                    <div className="p-4 rounded-xl bg-zinc-900 border border-zinc-800 space-y-2 text-xs">
+                      <strong className="text-emerald-400 block font-semibold">Key Concepts:</strong>
+                      <ul className="list-disc pl-4 space-y-1 text-zinc-300">
+                        {activePage.keyPoints.map((pt, i) => (
+                          <li key={i}>{pt}</li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+
+                  <div className="border-t border-zinc-800 pt-4 flex items-center justify-between text-[11px] text-zinc-500 font-mono">
+                    <span>Licensed Student: {studentData.email}</span>
+                    <span>Order: #{studentData.orderId}</span>
+                  </div>
+                </>
+              ) : (
+                <div className="text-center py-12 text-zinc-500">No content pages found.</div>
+              )}
             </div>
           </div>
         )}
-      </div>
+      </main>
 
-      {/* Bottom Navigation Toolbar for Paginated Reader */}
-      {viewMode === 'reader' && (
-        <footer className="h-14 border-t border-zinc-800 bg-zinc-900/90 flex items-center justify-between px-4 sm:px-8 z-20">
-          <div className="text-xs text-zinc-400 font-mono">
-            Page <span className="text-white font-bold">{currentPageIndex + 1}</span> of{' '}
-            <span className="text-white font-bold">{allPages.length}</span>
-          </div>
-
+      {/* Footer Controls for Text Mode */}
+      {viewMode === 'text' && pages.length > 0 && (
+        <footer className="h-12 border-t border-zinc-800 bg-zinc-950 px-4 flex items-center justify-between text-xs shrink-0">
           <div className="flex items-center gap-2">
             <button
-              onClick={() => setCurrentPageIndex((p) => Math.max(0, p - 1))}
-              disabled={currentPageIndex === 0}
-              className="flex items-center gap-1 px-3 py-1.5 rounded-lg border border-zinc-800 text-xs font-medium text-zinc-300 hover:text-white bg-zinc-800/60 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+              onClick={() => setZoomLevel((z) => Math.max(80, z - 10))}
+              className="p-1 rounded text-zinc-400 hover:text-white"
+              title="Zoom Out"
             >
-              <ChevronLeft className="w-4 h-4" />
-              <span>Previous Page</span>
+              <ZoomOut className="w-4 h-4" />
             </button>
-
+            <span className="text-zinc-500 font-mono text-[11px]">{zoomLevel}%</span>
             <button
-              onClick={() => setCurrentPageIndex((p) => Math.min(allPages.length - 1, p + 1))}
-              disabled={currentPageIndex >= allPages.length - 1}
-              className="flex items-center gap-1 px-3 py-1.5 rounded-lg border border-zinc-800 text-xs font-medium text-zinc-300 hover:text-white bg-zinc-800/60 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+              onClick={() => setZoomLevel((z) => Math.min(130, z + 10))}
+              className="p-1 rounded text-zinc-400 hover:text-white"
+              title="Zoom In"
             >
-              <span>Next Page</span>
-              <ChevronRight className="w-4 h-4" />
+              <ZoomIn className="w-4 h-4" />
             </button>
           </div>
 
-          <div className="text-[11px] text-zinc-500 hidden sm:block">
-            Protected Copy · Screen Captures Blocked
+          <div className="flex items-center gap-3">
+            <button
+              onClick={() => setActivePageIndex((p) => Math.max(0, p - 1))}
+              disabled={activePageIndex === 0}
+              className="p-1.5 rounded-lg bg-zinc-900 hover:bg-zinc-800 disabled:opacity-30 text-zinc-300 cursor-pointer"
+            >
+              <ChevronLeft className="w-4 h-4" />
+            </button>
+            <span className="font-mono text-zinc-400 text-xs">
+              Page {activePageIndex + 1} of {pages.length}
+            </span>
+            <button
+              onClick={() => setActivePageIndex((p) => Math.min(pages.length - 1, p + 1))}
+              disabled={activePageIndex >= pages.length - 1}
+              className="p-1.5 rounded-lg bg-zinc-900 hover:bg-zinc-800 disabled:opacity-30 text-zinc-300 cursor-pointer"
+            >
+              <ChevronRight className="w-4 h-4" />
+            </button>
           </div>
         </footer>
       )}

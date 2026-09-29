@@ -1,104 +1,147 @@
 import React from 'react';
-import { Mail, Phone, MessageSquare, ShieldCheck, Lock } from 'lucide-react';
+import { Smartphone, CheckCircle2, ShieldCheck, Mail, Heart } from 'lucide-react';
 import { KainatLogo } from './KainatLogo';
 
 interface FooterProps {
-  onOpenAdmin: () => void;
-  onSelectTab: (tab: string) => void;
+  easyPaisaNumber?: string;
+  whatsAppNumber?: string;
+  ownerEmail?: string;
   logoUrl?: string;
+  onOpenTrack?: () => void;
+  onOpenAdmin?: () => void;
+  onSelectCategory?: (cat: string) => void;
+  isLight?: boolean;
 }
 
-export const Footer: React.FC<FooterProps> = ({ onOpenAdmin, onSelectTab, logoUrl }) => {
+export const Footer: React.FC<FooterProps> = ({
+  easyPaisaNumber = '03415892099',
+  whatsAppNumber = '0324 9059918',
+  ownerEmail = 'ka8984510@gmail.com',
+  logoUrl,
+  onOpenTrack,
+  onOpenAdmin,
+  onSelectCategory,
+  isLight = false,
+}) => {
   return (
-    <footer className="border-t border-zinc-800/80 bg-zinc-950 py-12 text-zinc-400">
-      <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 space-y-8">
+    <footer className={`border-t transition-colors ${
+      isLight ? 'bg-white border-slate-200 text-slate-600' : 'bg-zinc-950 border-zinc-800 text-zinc-400'
+    }`}>
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12 space-y-8">
         <div className="grid grid-cols-1 md:grid-cols-4 gap-8">
-          {/* Brand Info */}
+          {/* Brand Col */}
           <div className="space-y-3 md:col-span-2">
-            <KainatLogo customLogoUrl={logoUrl} size="md" />
-            <p className="text-xs text-zinc-400 max-w-sm leading-relaxed mt-2">
-              Curated chapter-by-chapter source notes, derivations, formulas, and past paper solutions for Matric (9th & 10th), FSc (Part 1 & 2), and BSc university students by Kainat.
+            <KainatLogo customLogoUrl={logoUrl} size="md" isLight={isLight} />
+            <p className="text-xs leading-relaxed max-w-md">
+              Verified board and university source notes, solved papers, and derivations by Kainat. Protected digital document reader with instant multi-device access.
             </p>
-            <div className="text-xs text-zinc-500 flex items-center gap-1.5 pt-1">
-              <ShieldCheck className="w-4 h-4 text-emerald-500 shrink-0" />
-              <span>Protected Read-Only Document Reader with Dynamic Watermarks</span>
+            <div className="text-[11px] text-zinc-500 flex items-center gap-1.5 pt-1">
+              <span>FBISE & Punjab Board Syllabus 2026</span>
+              <span>·</span>
+              <span>Updated Regularly</span>
             </div>
           </div>
 
-          {/* Quick Academic Links */}
-          <div className="space-y-2">
-            <h4 className="text-xs font-semibold uppercase tracking-wider text-zinc-200">Academic Levels</h4>
-            <ul className="space-y-1.5 text-xs">
+          {/* Quick Links */}
+          <div className="space-y-3">
+            <h4 className={`text-xs font-bold uppercase tracking-wider ${isLight ? 'text-slate-800' : 'text-zinc-200'}`}>
+              Classes
+            </h4>
+            <ul className="text-xs space-y-2">
               <li>
                 <button
-                  onClick={() => onSelectTab('matric')}
-                  className="hover:text-emerald-400 transition-colors"
+                  onClick={() => onSelectCategory && onSelectCategory('Matric-9th')}
+                  className="hover:text-emerald-400 transition-colors cursor-pointer"
                 >
-                  Matric (9th & 10th Class)
+                  Matric 9th Notes
                 </button>
               </li>
               <li>
                 <button
-                  onClick={() => onSelectTab('fsc')}
-                  className="hover:text-emerald-400 transition-colors"
+                  onClick={() => onSelectCategory && onSelectCategory('Matric-10th')}
+                  className="hover:text-emerald-400 transition-colors cursor-pointer"
                 >
-                  FSc (Part 1 & 2 Pre-Eng/Pre-Med)
+                  Matric 10th Notes
                 </button>
               </li>
               <li>
                 <button
-                  onClick={() => onSelectTab('bsc')}
-                  className="hover:text-emerald-400 transition-colors"
+                  onClick={() => onSelectCategory && onSelectCategory('FSc-Part1')}
+                  className="hover:text-emerald-400 transition-colors cursor-pointer"
+                >
+                  FSc Part-1 (11th)
+                </button>
+              </li>
+              <li>
+                <button
+                  onClick={() => onSelectCategory && onSelectCategory('FSc-Part2')}
+                  className="hover:text-emerald-400 transition-colors cursor-pointer"
+                >
+                  FSc Part-2 (12th)
+                </button>
+              </li>
+              <li>
+                <button
+                  onClick={() => onSelectCategory && onSelectCategory('BSc-Year1')}
+                  className="hover:text-emerald-400 transition-colors cursor-pointer"
                 >
                   BSc Higher Sciences
                 </button>
               </li>
-              <li>
-                <button
-                  onClick={() => onSelectTab('library')}
-                  className="hover:text-emerald-400 transition-colors"
-                >
-                  My Reading Library
-                </button>
-              </li>
             </ul>
           </div>
 
-          {/* Direct Seller Contact Details */}
-          <div className="space-y-2">
-            <h4 className="text-xs font-semibold uppercase tracking-wider text-zinc-200">Kainat's Contact & Payment</h4>
-            <ul className="space-y-2 text-xs">
-              <li className="flex items-center gap-2 text-zinc-300">
-                <Phone className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
-                <span>EasyPaisa: <strong className="text-white font-mono">03415892099</strong></span>
+          {/* Direct Contacts */}
+          <div className="space-y-3">
+            <h4 className={`text-xs font-bold uppercase tracking-wider ${isLight ? 'text-slate-800' : 'text-zinc-200'}`}>
+              Student Support
+            </h4>
+            <ul className="text-xs space-y-2.5">
+              <li className="flex items-center gap-2">
+                <Smartphone className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+                <span>EasyPaisa: <strong className="text-zinc-200 font-mono">{easyPaisaNumber}</strong></span>
               </li>
-              <li className="flex items-center gap-2 text-zinc-300">
-                <MessageSquare className="w-3.5 h-3.5 text-teal-400 shrink-0" />
-                <span>WhatsApp: <strong className="text-white font-mono">0324 9059918</strong></span>
-              </li>
-              <li className="flex items-center gap-2 text-zinc-300">
-                <Mail className="w-3.5 h-3.5 text-indigo-400 shrink-0" />
-                <span>Email: <a href="mailto:ka8984510@gmail.com" className="text-zinc-200 hover:underline">ka8984510@gmail.com</a></span>
-              </li>
-              <li className="pt-2">
-                <button
-                  onClick={onOpenAdmin}
-                  className="inline-flex items-center gap-1.5 text-xs text-amber-400 hover:text-amber-300 px-2.5 py-1 rounded bg-zinc-900 border border-zinc-800 transition-colors"
+              <li className="flex items-center gap-2">
+                <CheckCircle2 className="w-3.5 h-3.5 text-teal-400 shrink-0" />
+                <a
+                  href={`https://wa.me/${whatsAppNumber.replace(/[^0-9]/g, '')}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="hover:underline hover:text-emerald-400"
                 >
-                  <Lock className="w-3 h-3 text-amber-400" />
-                  <span>Kainat Admin Login</span>
-                </button>
+                  WhatsApp: <strong className="text-zinc-200 font-mono">{whatsAppNumber}</strong>
+                </a>
               </li>
+              <li className="flex items-center gap-2">
+                <Mail className="w-3.5 h-3.5 text-purple-400 shrink-0" />
+                <span className="truncate">{ownerEmail}</span>
+              </li>
+              {onOpenTrack && (
+                <li className="pt-1">
+                  <button
+                    onClick={onOpenTrack}
+                    className="text-xs text-emerald-400 hover:underline cursor-pointer font-semibold"
+                  >
+                    Track Order Status &rarr;
+                  </button>
+                </li>
+              )}
             </ul>
           </div>
         </div>
 
-        <div className="border-t border-zinc-900 pt-6 flex flex-col sm:flex-row items-center justify-between text-xs text-zinc-500 gap-4">
-          <div>
-            © {new Date().getFullYear()} Kainat Notes Hub. All intellectual rights reserved.
-          </div>
-          <div>
-            Only readable online · Non-downloadable protected files
+        {/* Bottom bar */}
+        <div className="border-t border-zinc-800/80 pt-6 flex flex-col sm:flex-row items-center justify-between gap-3 text-[11px] text-zinc-500">
+          <p>© {new Date().getFullYear()} Kainat Notes Hub. All academic rights reserved.</p>
+          <div className="flex items-center gap-4">
+            {onOpenAdmin && (
+              <button
+                onClick={onOpenAdmin}
+                className="hover:text-zinc-400 transition-colors cursor-pointer"
+              >
+                Owner Portal
+              </button>
+            )}
           </div>
         </div>
       </div>
