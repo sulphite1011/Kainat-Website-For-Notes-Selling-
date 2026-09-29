@@ -7,6 +7,22 @@ import nodemailer from 'nodemailer';
 import { initialNotesCatalog } from './src/data/notesCatalog.ts';
 import { Order, OrderNotificationAlert, NoteItem, SiteSettings } from './src/types/index.ts';
 import { generatePagesFromRawContent } from './src/utils/notesFormatter.ts';
+import {
+  initMongo,
+  isMongoConnected,
+  mongoGetStatus,
+  mongoGetNotes,
+  mongoSaveNote,
+  mongoDeleteNote,
+  mongoGetOrders,
+  mongoSaveOrder,
+  mongoGetSettings,
+  mongoSaveSettings,
+  mongoGetUsers,
+  mongoSaveUser,
+  testMongoConnection,
+} from './src/server/mongo.ts';
+import { StudentUser } from './src/types/index.ts';
 
 dotenv.config();
 
@@ -29,6 +45,7 @@ if (!fs.existsSync(UPLOAD_DIR)) {
 interface DatabaseSchema {
   notes: NoteItem[];
   orders: Order[];
+  users: StudentUser[];
   notifications: OrderNotificationAlert[];
   settings: SiteSettings;
 }
@@ -40,8 +57,17 @@ const defaultSettings: SiteSettings = {
   easyPaisaNumber: '03415892099',
   whatsAppNumber: '0324 9059918',
   ownerEmail: 'ka8984510@gmail.com',
-  clerkPublishableKey: process.env.VITE_CLERK_PUBLISHABLE_KEY || process.env.CLERK_PUBLISHABLE_KEY || '',
+  clerkPublishableKey: process.env.CLERK_PUBLISHABLE_KEY || process.env.VITE_CLERK_PUBLISHABLE_KEY || '',
 };
+
+function getActiveClerkKey(): string {
+  return (
+    process.env.CLERK_PUBLISHABLE_KEY ||
+    process.env.VITE_CLERK_PUBLISHABLE_KEY ||
+    db.settings.clerkPublishableKey ||
+    ''
+  ).trim();
+}
 
 function loadDatabase(): DatabaseSchema {
   try {
@@ -51,8 +77,8 @@ function loadDatabase(): DatabaseSchema {
       if (!parsed.settings) {
         parsed.settings = defaultSettings;
       }
-      if (!parsed.settings.clerkPublishableKey && (process.env.VITE_CLERK_PUBLISHABLE_KEY || process.env.CLERK_PUBLISHABLE_KEY)) {
-        parsed.settings.clerkPublishableKey = process.env.VITE_CLERK_PUBLISHABLE_KEY || process.env.CLERK_PUBLISHABLE_KEY;
+      if (!Array.isArray(parsed.users)) {
+        parsed.users = [];
       }
       return parsed;
     }
@@ -63,6 +89,7 @@ function loadDatabase(): DatabaseSchema {
   const initialDb: DatabaseSchema = {
     notes: initialNotesCatalog,
     orders: [],
+    users: [],
     notifications: [],
     settings: defaultSettings,
   };
@@ -81,6 +108,15 @@ function saveDatabase(dbData: DatabaseSchema) {
 
 let db = loadDatabase();
 
+// Connect to MongoDB Atlas
+initMongo().then((connected) => {
+  if (connected) {
+    console.log('[MongoDB] Ready for all app read/write operations.');
+  }
+}).catch((err) => {
+  console.warn('[MongoDB] Init error:', err.message);
+});
+
 const sseClients: Response[] = [];
 
 function broadcastAlert(alert: OrderNotificationAlert) {
@@ -98,6 +134,69 @@ app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ extended: true, limit: '50mb' }));
 
 app.use('/uploads', express.static(UPLOAD_DIR));
+
+// MongoDB Status Check Endpoint
+app.get('/api/mongodb/status', async (_req: Request, res: Response) => {
+  const status = await mongoGetStatus();
+  res.json({ success: true, ...status });
+});
+
+// Test MongoDB Connection Endpoint
+app.post('/api/mongodb/test', async (req: Request, res: Response) => {
+  const { uri } = req.body;
+  const result = await testMongoConnection(uri);
+  res.json(result);
+});
+
+// Student User Sync & Directory
+app.post('/api/users/sync', async (req: Request, res: Response) => {
+  const { email, name, phone, verifiedAt } = req.body;
+  if (!email) {
+    return res.status(400).json({ success: false, message: 'Email is required' });
+  }
+
+  const cleanEmail = email.toLowerCase().trim();
+  const existingIndex = db.users.findIndex((u) => u.email.toLowerCase().trim() === cleanEmail);
+  const studentUser: StudentUser = {
+    id: existingIndex >= 0 ? db.users[existingIndex].id : `usr_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+    email: cleanEmail,
+    name: name || (existingIndex >= 0 ? db.users[existingIndex].name : 'Student'),
+    phone: phone || (existingIndex >= 0 ? db.users[existingIndex].phone : ''),
+    verifiedAt: verifiedAt || new Date().toISOString(),
+  };
+
+  if (existingIndex >= 0) {
+    db.users[existingIndex] = { ...db.users[existingIndex], ...studentUser };
+  } else {
+    db.users.push(studentUser);
+  }
+  saveDatabase(db);
+
+  if (isMongoConnected()) {
+    try {
+      await mongoSaveUser(studentUser);
+    } catch (e) {
+      console.warn('Failed to sync user to MongoDB:', e);
+    }
+  }
+
+  res.json({ success: true, user: studentUser });
+});
+
+app.get('/api/users', async (_req: Request, res: Response) => {
+  if (isMongoConnected()) {
+    try {
+      const mongoUsers = await mongoGetUsers();
+      if (mongoUsers && mongoUsers.length > 0) {
+        db.users = mongoUsers;
+        return res.json({ success: true, users: mongoUsers });
+      }
+    } catch (e) {
+      console.warn('Failed to fetch users from MongoDB:', e);
+    }
+  }
+  res.json({ success: true, users: db.users });
+});
 
 // Media Upload Engine
 app.post('/api/upload', (req: Request, res: Response) => {
@@ -140,26 +239,38 @@ app.post('/api/upload', (req: Request, res: Response) => {
 });
 
 // Settings & Config
-app.get('/api/settings', (_req: Request, res: Response) => {
-  const currentKey = db.settings.clerkPublishableKey || process.env.VITE_CLERK_PUBLISHABLE_KEY || process.env.CLERK_PUBLISHABLE_KEY || '';
+app.get('/api/settings', async (_req: Request, res: Response) => {
+  let settingsToSend = db.settings;
+  if (isMongoConnected()) {
+    try {
+      const mongoSettings = await mongoGetSettings();
+      if (mongoSettings) {
+        settingsToSend = mongoSettings;
+      }
+    } catch {
+      // fallback
+    }
+  }
+
+  const currentKey = getActiveClerkKey();
   res.json({
     success: true,
     settings: {
-      ...db.settings,
+      ...settingsToSend,
       clerkPublishableKey: currentKey,
     },
   });
 });
 
 app.get('/api/clerk-key', (_req: Request, res: Response) => {
-  const currentKey = db.settings.clerkPublishableKey || process.env.VITE_CLERK_PUBLISHABLE_KEY || process.env.CLERK_PUBLISHABLE_KEY || '';
+  const currentKey = getActiveClerkKey();
   res.json({
     success: true,
     clerkPublishableKey: currentKey,
   });
 });
 
-app.post('/api/settings', (req: Request, res: Response) => {
+app.post('/api/settings', async (req: Request, res: Response) => {
   const { siteName, logoUrl, easyPaisaNumber, whatsAppNumber, ownerEmail, mongoDbUri, clerkPublishableKey, googleClientId, smtpHost, smtpPort, smtpUser, smtpPass, smtpSenderEmail } = req.body;
 
   if (siteName) db.settings.siteName = siteName;
@@ -177,6 +288,21 @@ app.post('/api/settings', (req: Request, res: Response) => {
   if (smtpSenderEmail) db.settings.smtpSenderEmail = smtpSenderEmail;
 
   saveDatabase(db);
+
+  if (isMongoConnected()) {
+    try {
+      await mongoSaveSettings(db.settings);
+    } catch (e) {
+      console.warn('Error saving settings to MongoDB:', e);
+    }
+  }
+
+  // If user provided mongoDbUri dynamically and not connected yet, try connecting
+  if (mongoDbUri && !isMongoConnected()) {
+    process.env.MONGODB_URI = mongoDbUri;
+    initMongo().catch(() => {});
+  }
+
   res.json({ success: true, message: 'Settings updated successfully.', settings: db.settings });
 });
 
@@ -203,11 +329,22 @@ app.post('/api/admin/login', (req: Request, res: Response) => {
 });
 
 // Notes Catalog
-app.get('/api/notes', (_req: Request, res: Response) => {
+app.get('/api/notes', async (_req: Request, res: Response) => {
+  if (isMongoConnected()) {
+    try {
+      const mongoNotes = await mongoGetNotes();
+      if (mongoNotes && mongoNotes.length > 0) {
+        db.notes = mongoNotes;
+        return res.json({ success: true, notes: mongoNotes });
+      }
+    } catch (e) {
+      console.warn('Error fetching notes from MongoDB:', e);
+    }
+  }
   res.json({ success: true, notes: db.notes });
 });
 
-app.post('/api/notes', (req: Request, res: Response) => {
+app.post('/api/notes', async (req: Request, res: Response) => {
   const noteData: NoteItem = req.body;
   if (!noteData.title || !noteData.classLevel || !noteData.subject) {
     return res.status(400).json({ success: false, message: 'Missing required note parameters.' });
@@ -227,10 +364,19 @@ app.post('/api/notes', (req: Request, res: Response) => {
 
   db.notes.unshift(createdNote);
   saveDatabase(db);
+
+  if (isMongoConnected()) {
+    try {
+      await mongoSaveNote(createdNote);
+    } catch (e) {
+      console.warn('Error persisting note to MongoDB:', e);
+    }
+  }
+
   res.json({ success: true, note: createdNote });
 });
 
-app.put('/api/notes/:id', (req: Request, res: Response) => {
+app.put('/api/notes/:id', async (req: Request, res: Response) => {
   const { id } = req.params;
   const index = db.notes.findIndex((n) => n.id === id);
   if (index === -1) {
@@ -240,22 +386,51 @@ app.put('/api/notes/:id', (req: Request, res: Response) => {
   const updatedNote = { ...db.notes[index], ...req.body, id };
   db.notes[index] = updatedNote;
   saveDatabase(db);
+
+  if (isMongoConnected()) {
+    try {
+      await mongoSaveNote(updatedNote);
+    } catch (e) {
+      console.warn('Error updating note in MongoDB:', e);
+    }
+  }
+
   res.json({ success: true, note: updatedNote });
 });
 
-app.delete('/api/notes/:id', (req: Request, res: Response) => {
+app.delete('/api/notes/:id', async (req: Request, res: Response) => {
   const { id } = req.params;
   db.notes = db.notes.filter((n) => n.id !== id);
   saveDatabase(db);
+
+  if (isMongoConnected()) {
+    try {
+      await mongoDeleteNote(id);
+    } catch (e) {
+      console.warn('Error deleting note from MongoDB:', e);
+    }
+  }
+
   res.json({ success: true, message: 'Note deleted successfully.' });
 });
 
 // Orders
-app.get('/api/orders', (_req: Request, res: Response) => {
+app.get('/api/orders', async (_req: Request, res: Response) => {
+  if (isMongoConnected()) {
+    try {
+      const mongoOrders = await mongoGetOrders();
+      if (mongoOrders) {
+        db.orders = mongoOrders;
+        return res.json({ success: true, orders: mongoOrders });
+      }
+    } catch (e) {
+      console.warn('Error fetching orders from MongoDB:', e);
+    }
+  }
   res.json({ success: true, orders: db.orders });
 });
 
-app.post('/api/orders', (req: Request, res: Response) => {
+app.post('/api/orders', async (req: Request, res: Response) => {
   const { studentName, studentEmail, studentPhone, noteIds, noteTitles, totalAmountPKR, paymentMethod, easypaisaAccount, trxId, screenshotUrl } = req.body;
 
   if (!studentName || !studentEmail || !studentPhone || !trxId) {
@@ -279,12 +454,42 @@ app.post('/api/orders', (req: Request, res: Response) => {
   };
 
   db.orders.unshift(newOrder);
+
+  // Sync user in database
+  const cleanEmail = newOrder.studentEmail.toLowerCase();
+  const existingUser = db.users.find((u) => u.email.toLowerCase() === cleanEmail);
+  const studentUserObj: StudentUser = {
+    id: existingUser ? existingUser.id : `usr_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+    email: cleanEmail,
+    name: newOrder.studentName,
+    phone: newOrder.studentPhone,
+    verifiedAt: new Date().toISOString(),
+  };
+  if (existingUser) {
+    existingUser.name = newOrder.studentName;
+    existingUser.phone = newOrder.studentPhone;
+  } else {
+    db.users.push(studentUserObj);
+  }
+
   saveDatabase(db);
+
+  if (isMongoConnected()) {
+    try {
+      await Promise.all([
+        mongoSaveOrder(newOrder),
+        mongoSaveUser(studentUserObj),
+      ]);
+    } catch (e) {
+      console.warn('Error saving order/user to MongoDB:', e);
+    }
+  }
+
   res.json({ success: true, order: newOrder });
 });
 
 // Verify Order (Admin Action)
-app.patch('/api/orders/:id/verify', (req: Request, res: Response) => {
+app.patch('/api/orders/:id/verify', async (req: Request, res: Response) => {
   const { id } = req.params;
   const order = db.orders.find((o) => o.id === id);
   if (!order) {
@@ -302,6 +507,14 @@ app.patch('/api/orders/:id/verify', (req: Request, res: Response) => {
   order.notesUnlocked = unlocked;
 
   saveDatabase(db);
+
+  if (isMongoConnected()) {
+    try {
+      await mongoSaveOrder(order);
+    } catch (e) {
+      console.warn('Error updating verified order in MongoDB:', e);
+    }
+  }
 
   // Broadcast real-time SSE alert
   const alert: OrderNotificationAlert = {
@@ -322,7 +535,7 @@ app.patch('/api/orders/:id/verify', (req: Request, res: Response) => {
 });
 
 // Reject Order
-app.patch('/api/orders/:id/reject', (req: Request, res: Response) => {
+app.patch('/api/orders/:id/reject', async (req: Request, res: Response) => {
   const { id } = req.params;
   const order = db.orders.find((o) => o.id === id);
   if (!order) {
@@ -331,6 +544,15 @@ app.patch('/api/orders/:id/reject', (req: Request, res: Response) => {
 
   order.status = 'rejected';
   saveDatabase(db);
+
+  if (isMongoConnected()) {
+    try {
+      await mongoSaveOrder(order);
+    } catch (e) {
+      console.warn('Error saving rejected order in MongoDB:', e);
+    }
+  }
+
   res.json({ success: true, order });
 });
 

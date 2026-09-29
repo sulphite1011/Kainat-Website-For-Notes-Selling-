@@ -7,6 +7,7 @@ import {
   getStoredStudent,
   saveStoredStudent,
   apiGetStudentOrders,
+  apiSyncUser,
 } from './services/apiClient';
 import { ClerkAuthProvider } from './context/ClerkContext';
 import { Navbar } from './components/Navbar';
@@ -43,6 +44,8 @@ export const AppContent: React.FC = () => {
   const [isCheckoutOpen, setIsCheckoutOpen] = useState(false);
   const [isAdminOpen, setIsAdminOpen] = useState(false);
   const [isStudentAuthOpen, setIsStudentAuthOpen] = useState(false);
+  const [authModalPrompt, setAuthModalPrompt] = useState<{ title?: string; subtitle?: string } | null>(null);
+  const [pendingCartNote, setPendingCartNote] = useState<NoteItem | null>(null);
   const [viewerData, setViewerData] = useState<{
     note: NoteItem;
     studentData: { name: string; email: string; phone: string; orderId: string };
@@ -102,10 +105,23 @@ export const AppContent: React.FC = () => {
     }
   }, [activeTab]);
 
-  // Sync Student verified notes
+  // Sync Student verified notes & MongoDB profile
   const handleStudentSync = async (student: StudentUser) => {
     setCurrentStudent(student);
     saveStoredStudent(student);
+    apiSyncUser(student).catch(() => {});
+
+    // If student was attempting to add a note to cart before signing in, fulfill it now
+    if (pendingCartNote) {
+      setCartNotes((prev) => {
+        if (!prev.some((n) => n.id === pendingCartNote.id)) {
+          return [...prev, pendingCartNote];
+        }
+        return prev;
+      });
+      setPendingCartNote(null);
+    }
+
     try {
       const studentOrders = await apiGetStudentOrders(student.email);
       if (studentOrders && studentOrders.length > 0) {
@@ -124,9 +140,21 @@ export const AppContent: React.FC = () => {
   const handleStudentLoggedOut = () => {
     setCurrentStudent(null);
     saveStoredStudent(null);
+    setPendingCartNote(null);
   };
 
   const handleAddToCart = (note: NoteItem) => {
+    // REQUIREMENT: A student must be logged in first before adding anything to cart!
+    if (!currentStudent) {
+      setPendingCartNote(note);
+      setAuthModalPrompt({
+        title: 'Sign In to Add to Cart',
+        subtitle: `Please sign in with your Google account before adding "${note.title}" to your cart. Your course access will be tied to your Gmail.`,
+      });
+      setIsStudentAuthOpen(true);
+      return;
+    }
+
     setCartNotes((prev) => {
       if (prev.some((n) => n.id === note.id)) {
         return prev.filter((n) => n.id !== note.id);
@@ -292,7 +320,12 @@ export const AppContent: React.FC = () => {
       <StudentAuthModal
         isOpen={isStudentAuthOpen}
         currentStudent={currentStudent}
-        onClose={() => setIsStudentAuthOpen(false)}
+        title={authModalPrompt?.title}
+        subtitle={authModalPrompt?.subtitle}
+        onClose={() => {
+          setIsStudentAuthOpen(false);
+          setAuthModalPrompt(null);
+        }}
         onStudentAuthenticated={handleStudentSync}
         onStudentLoggedOut={handleStudentLoggedOut}
       />

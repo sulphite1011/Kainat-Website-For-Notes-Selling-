@@ -387,3 +387,53 @@ export async function apiUploadFile(base64Data: string, prefix = 'upload'): Prom
     return { success: false, message: err.message || 'Upload failed' };
   }
 }
+
+export async function apiSyncUser(student: Partial<StudentUser>): Promise<{ success: boolean; user?: StudentUser }> {
+  try {
+    const res = await fetch('/api/users/sync', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(student),
+    });
+    return await res.json();
+  } catch {
+    return { success: false };
+  }
+}
+
+export async function apiGetUsers(): Promise<StudentUser[]> {
+  try {
+    const res = await fetch('/api/users');
+    if (res.ok) {
+      const data = await res.json();
+      if (data.success && Array.isArray(data.users)) return data.users;
+    }
+  } catch {
+    // ignore
+  }
+  return [];
+}
+
+export async function apiGetMongoStatus(): Promise<any> {
+  try {
+    const res = await fetch('/api/mongodb/status');
+    if (res.ok) return await res.json();
+  } catch {
+    // ignore
+  }
+  return { success: false, connected: false };
+}
+
+export async function apiTestMongo(uri: string): Promise<{ success: boolean; message: string; database?: string }> {
+  try {
+    const res = await fetch('/api/mongodb/test', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ uri }),
+    });
+    return await res.json();
+  } catch (err: any) {
+    return { success: false, message: err.message || 'Failed to test MongoDB connection' };
+  }
+}
+

@@ -79,7 +79,7 @@ export const initialNotesCatalog: NoteItem[] = [
         ],
         contentHtml: `
           <div class="space-y-4">
-            <h3 class="text-base font-bold text-white">Chapter 2: Complete Derivations and Numerical Vault</h3>
+            <h3 class="text-base font-bold text-white">Chapter 2: Complete Derivations and Solved Numericals</h3>
             <p class="text-xs text-zinc-300 leading-relaxed">
               Full licensed notes unlocked. All steps and formulas available for offline study and high-score revision.
             </p>

@@ -97,7 +97,7 @@ export const Hero: React.FC<HeroProps> = ({ onSelectCategory, onOpenTrack }) => 
             <div className="relative rounded-2xl overflow-hidden border border-zinc-800 bg-zinc-900 shadow-2xl group">
               <img
                 src="/images/hero_notes_showcase_1790249177382.jpg"
-                alt="Comprehensive scientific source notes by Kainat"
+                alt="Scientific source notes by Kainat"
                 className="w-full h-80 lg:h-96 object-cover group-hover:scale-105 transition-transform duration-500"
                 onError={(e) => {
                   e.currentTarget.style.display = 'none';
@@ -107,18 +107,8 @@ export const Hero: React.FC<HeroProps> = ({ onSelectCategory, onOpenTrack }) => 
               />
               <div className="img-hero-fallback hidden w-full h-80 lg:h-96 items-center justify-center bg-zinc-900 text-zinc-400 flex-col gap-3">
                 <ShieldCheck className="w-12 h-12 text-emerald-400" />
-                <span className="text-sm font-semibold">Curated Examination Vault</span>
               </div>
-              <div className="absolute inset-0 bg-gradient-to-t from-zinc-950/80 via-transparent to-transparent pointer-events-none" />
-              <div className="absolute bottom-4 left-4 right-4 p-3 bg-zinc-900/90 backdrop-blur-md rounded-xl border border-zinc-700/60 flex items-center justify-between text-xs">
-                <div>
-                  <span className="text-white font-bold block">100% Board Syllabus Solved</span>
-                  <span className="text-zinc-400 text-[11px]">Handwritten Derivations & Diagrams</span>
-                </div>
-                <span className="px-2.5 py-1 rounded bg-emerald-500/20 text-emerald-300 font-bold border border-emerald-500/40 text-[11px]">
-                  Verified
-                </span>
-              </div>
+              <div className="absolute inset-0 bg-gradient-to-t from-zinc-950/40 via-transparent to-transparent pointer-events-none" />
             </div>
           </div>
         </div>
