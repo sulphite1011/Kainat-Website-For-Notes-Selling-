@@ -5,6 +5,7 @@ const SETTINGS_KEY = 'kainat_notes_settings';
 const NOTES_KEY = 'kainat_notes_catalog';
 const ORDERS_KEY = 'kainat_orders_vault';
 const STUDENT_USER_KEY = 'kainat_student_user';
+const USERS_LIST_KEY = 'kainat_registered_students';
 
 export const defaultSettings: SiteSettings = {
   siteName: 'Kainat Notes Hub',
@@ -389,16 +390,41 @@ export async function apiUploadFile(base64Data: string, prefix = 'upload'): Prom
 }
 
 export async function apiSyncUser(student: Partial<StudentUser>): Promise<{ success: boolean; user?: StudentUser }> {
+  // Store in in-app local storage immediately
+  try {
+    const raw = localStorage.getItem(USERS_LIST_KEY);
+    const list: StudentUser[] = raw ? JSON.parse(raw) : [];
+    const cleanEmail = (student.email || '').toLowerCase().trim();
+    const idx = list.findIndex((u) => u.email.toLowerCase().trim() === cleanEmail);
+    const userObj: StudentUser = {
+      id: idx >= 0 ? list[idx].id : `usr_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+      email: cleanEmail,
+      name: student.name || (idx >= 0 ? list[idx].name : 'Student'),
+      phone: student.phone || (idx >= 0 ? list[idx].phone : ''),
+      verifiedAt: student.verifiedAt || new Date().toISOString(),
+    };
+    if (idx >= 0) {
+      list[idx] = { ...list[idx], ...userObj };
+    } else {
+      list.push(userObj);
+    }
+    localStorage.setItem(USERS_LIST_KEY, JSON.stringify(list));
+  } catch {
+    // ignore
+  }
+
+  // Also sync to server if running
   try {
     const res = await fetch('/api/users/sync', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(student),
     });
-    return await res.json();
+    if (res.ok) return await res.json();
   } catch {
-    return { success: false };
+    // serverless / offline
   }
+  return { success: true };
 }
 
 export async function apiGetUsers(): Promise<StudentUser[]> {
@@ -406,34 +432,22 @@ export async function apiGetUsers(): Promise<StudentUser[]> {
     const res = await fetch('/api/users');
     if (res.ok) {
       const data = await res.json();
-      if (data.success && Array.isArray(data.users)) return data.users;
+      if (data.success && Array.isArray(data.users)) {
+        try {
+          localStorage.setItem(USERS_LIST_KEY, JSON.stringify(data.users));
+        } catch {}
+        return data.users;
+      }
     }
   } catch {
     // ignore
   }
+
+  // In-app storage fallback
+  try {
+    const raw = localStorage.getItem(USERS_LIST_KEY);
+    if (raw) return JSON.parse(raw);
+  } catch {}
   return [];
-}
-
-export async function apiGetMongoStatus(): Promise<any> {
-  try {
-    const res = await fetch('/api/mongodb/status');
-    if (res.ok) return await res.json();
-  } catch {
-    // ignore
-  }
-  return { success: false, connected: false };
-}
-
-export async function apiTestMongo(uri: string): Promise<{ success: boolean; message: string; database?: string }> {
-  try {
-    const res = await fetch('/api/mongodb/test', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ uri }),
-    });
-    return await res.json();
-  } catch (err: any) {
-    return { success: false, message: err.message || 'Failed to test MongoDB connection' };
-  }
 }
 
