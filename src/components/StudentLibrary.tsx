@@ -199,7 +199,7 @@ export const StudentLibrary: React.FC<StudentLibraryProps> = ({
               <div className="space-y-2.5">
                 <div className="flex items-center justify-between">
                   <span className="text-[11px] font-semibold text-emerald-400 px-2 py-0.5 rounded bg-emerald-500/10 border border-emerald-500/20">
-                    {note.classLevel.replace('-', ' ')}
+                    {(note.classLevel || 'Course').replace('-', ' ')}
                   </span>
                   <span className="text-[11px] text-zinc-500 font-mono">
                     Order #{order.id}

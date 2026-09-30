@@ -158,21 +158,23 @@ export const NotePreviewModal: React.FC<NotePreviewModalProps> = ({
                 <p className="text-xs text-zinc-300 leading-relaxed">{note.description}</p>
               </div>
 
-              <div className="p-4 rounded-xl bg-zinc-900/80 border border-zinc-800 space-y-2">
-                <h4 className="text-xs font-bold text-emerald-400 uppercase tracking-wider">
-                  Topics Included:
-                </h4>
-                <ul className="text-xs text-zinc-300 space-y-1.5 pl-4 list-disc marker:text-emerald-500">
-                  {note.topicsCovered.map((t, idx) => (
-                    <li key={idx}>{t}</li>
-                  ))}
-                </ul>
-              </div>
+              {(note.topicsCovered && note.topicsCovered.length > 0) && (
+                <div className="p-4 rounded-xl bg-zinc-900/80 border border-zinc-800 space-y-2">
+                  <h4 className="text-xs font-bold text-emerald-400 uppercase tracking-wider">
+                    Topics Included:
+                  </h4>
+                  <ul className="text-xs text-zinc-300 space-y-1.5 pl-4 list-disc marker:text-emerald-500">
+                    {note.topicsCovered.map((t, idx) => (
+                      <li key={idx}>{t}</li>
+                    ))}
+                  </ul>
+                </div>
+              )}
 
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-center text-xs">
                 <div className="p-3 bg-zinc-900 border border-zinc-800 rounded-xl">
                   <span className="text-zinc-500 block text-[10px]">Class</span>
-                  <span className="font-bold text-white">{note.classLevel.replace('-', ' ')}</span>
+                  <span className="font-bold text-white">{(note.classLevel || 'Course').replace('-', ' ')}</span>
                 </div>
                 <div className="p-3 bg-zinc-900 border border-zinc-800 rounded-xl">
                   <span className="text-zinc-500 block text-[10px]">Subject</span>

@@ -31,6 +31,7 @@ import {
 import { sound } from '../utils/soundEffects';
 import { CircularLogoCropper } from './CircularLogoCropper';
 import { KainatLogo } from './KainatLogo';
+import { generatePagesFromRawContent } from '../utils/notesFormatter';
 
 interface AdminPortalProps {
   isOpen: boolean;
@@ -224,17 +225,44 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
 
     setIsSaving(true);
     try {
+      const noteToSave: NoteItem = {
+        id: editingNote.id || `note-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
+        title: editingNote.title.trim(),
+        classLevel: editingNote.classLevel || 'Matric-9th',
+        subject: editingNote.subject || 'Physics',
+        chapterNumber: Number(editingNote.chapterNumber) || 1,
+        chapterTitle: editingNote.chapterTitle || '',
+        description: editingNote.description || '',
+        totalPages: Number(editingNote.totalPages) || 24,
+        pricePKR: Number(editingNote.pricePKR) || 199,
+        rating: editingNote.rating || 5.0,
+        reviewsCount: editingNote.reviewsCount || 1,
+        topicsCovered: Array.isArray(editingNote.topicsCovered) && editingNote.topicsCovered.length > 0
+          ? editingNote.topicsCovered
+          : ['Solved Derivations', 'Board Important Numericals'],
+        previewPageLimit: Number(editingNote.previewPageLimit) || 3,
+        googleDriveUrl: editingNote.googleDriveUrl || '',
+        samplePdfUrl: editingNote.samplePdfUrl || '',
+        coverImage: editingNote.coverImage || '',
+        previewPages: (editingNote.previewPages && editingNote.previewPages.length > 0)
+          ? editingNote.previewPages
+          : generatePagesFromRawContent(editingNote.description || '', editingNote.chapterTitle || 'Chapter 1', editingNote.classLevel || 'Matric-9th', editingNote.subject || 'Physics'),
+        fullContentPages: (editingNote.fullContentPages && editingNote.fullContentPages.length > 0)
+          ? editingNote.fullContentPages
+          : generatePagesFromRawContent(editingNote.description || '', editingNote.chapterTitle || 'Chapter 1', editingNote.classLevel || 'Matric-9th', editingNote.subject || 'Physics'),
+      };
+
       if (editingNote.id) {
-        await apiUpdateNote(editingNote as NoteItem);
+        await apiUpdateNote(noteToSave);
         showNotification('Note updated successfully!');
       } else {
-        await apiSaveNote(editingNote as NoteItem);
+        await apiSaveNote(noteToSave);
         showNotification('New note added to catalog successfully!');
       }
       setEditingNote(null);
       onRefreshData();
-    } catch {
-      showNotification('Failed to save note.', true);
+    } catch (err: any) {
+      showNotification('Failed to save note: ' + (err.message || 'Error'), true);
     } finally {
       setIsSaving(false);
     }
@@ -520,7 +548,7 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
                           <div className="space-y-1 min-w-0">
                             <div className="flex items-center gap-2">
                               <span className="text-[11px] font-bold text-emerald-400 px-2 py-0.5 rounded bg-emerald-500/10">
-                                {note.classLevel.replace('-', ' ')}
+                                {(note.classLevel || 'Course').replace('-', ' ')}
                               </span>
                               <span className="text-xs text-zinc-400">{note.subject}</span>
                             </div>

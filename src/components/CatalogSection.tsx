@@ -72,10 +72,10 @@ export const CatalogSection: React.FC<CatalogSectionProps> = ({
 
       if (searchQuery.trim()) {
         const q = searchQuery.toLowerCase();
-        const matchesTitle = item.title.toLowerCase().includes(q);
-        const matchesChapter = item.chapterTitle.toLowerCase().includes(q);
-        const matchesTopic = item.topicsCovered.some((t) => t.toLowerCase().includes(q));
-        const matchesSubject = item.subject.toLowerCase().includes(q);
+        const matchesTitle = (item.title || '').toLowerCase().includes(q);
+        const matchesChapter = (item.chapterTitle || '').toLowerCase().includes(q);
+        const matchesTopic = (item.topicsCovered || []).some((t) => (t || '').toLowerCase().includes(q));
+        const matchesSubject = (item.subject || '').toLowerCase().includes(q);
         if (!matchesTitle && !matchesChapter && !matchesTopic && !matchesSubject) return false;
       }
 
@@ -253,13 +253,13 @@ export const CatalogSection: React.FC<CatalogSectionProps> = ({
 
                     {/* Class & Subject Tag */}
                     <div className="absolute bottom-2 left-3 text-[11px] font-medium text-zinc-400 flex items-center gap-1.5">
-                      <span>{note.classLevel.replace('-', ' ')}</span>
+                      <span>{(note.classLevel || 'Course').replace('-', ' ')}</span>
                       <span aria-hidden="true">·</span>
-                      <span className="text-zinc-300 font-semibold">{note.subject}</span>
+                      <span className="text-zinc-300 font-semibold">{note.subject || 'All Subjects'}</span>
                     </div>
 
                     <div className="absolute bottom-2 right-3 text-[11px] text-zinc-400 font-mono">
-                      {note.totalPages} pages
+                      {note.totalPages || 1} pages
                     </div>
                   </div>
 
@@ -270,23 +270,25 @@ export const CatalogSection: React.FC<CatalogSectionProps> = ({
                     </h3>
 
                     <p className="text-xs text-zinc-400 line-clamp-2 leading-relaxed">
-                      {note.description}
+                      {note.description || 'Verified course study notes.'}
                     </p>
 
                     {/* Topics Included */}
-                    <div className="space-y-1 pt-1">
-                      <div className="text-[11px] font-semibold text-zinc-500 uppercase tracking-wider">
-                        Key Topics Included:
+                    {(note.topicsCovered && note.topicsCovered.length > 0) && (
+                      <div className="space-y-1 pt-1">
+                        <div className="text-[11px] font-semibold text-zinc-500 uppercase tracking-wider">
+                          Key Topics Included:
+                        </div>
+                        <ul className="text-xs text-zinc-300 space-y-1">
+                          {(note.topicsCovered || []).slice(0, 3).map((topic, i) => (
+                            <li key={i} className="flex items-start gap-1.5 line-clamp-1">
+                              <span className="text-emerald-500 font-bold shrink-0">›</span>
+                              <span className="truncate">{topic}</span>
+                            </li>
+                          ))}
+                        </ul>
                       </div>
-                      <ul className="text-xs text-zinc-300 space-y-1">
-                        {note.topicsCovered.slice(0, 3).map((topic, i) => (
-                          <li key={i} className="flex items-start gap-1.5 line-clamp-1">
-                            <span className="text-emerald-500 font-bold shrink-0">›</span>
-                            <span className="truncate">{topic}</span>
-                          </li>
-                        ))}
-                      </ul>
-                    </div>
+                    )}
                   </div>
                 </div>
 
