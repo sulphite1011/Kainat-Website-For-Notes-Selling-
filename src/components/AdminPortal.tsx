@@ -11,7 +11,6 @@ import {
   ExternalLink,
   Search,
   Check,
-  KeyRound,
   Camera,
   Users,
   Image,
@@ -54,7 +53,7 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
   onUpdateSettings,
   isLight = false,
 }) => {
-  const [activeTab, setActiveTab] = useState<'orders' | 'notes' | 'branding' | 'clerk-auth' | 'users'>('orders');
+  const [activeTab, setActiveTab] = useState<'orders' | 'notes' | 'branding' | 'users'>('orders');
   const [orderFilter, setOrderFilter] = useState<'all' | 'pending' | 'verified' | 'rejected'>('all');
   const [searchQuery, setSearchQuery] = useState('');
 
@@ -65,9 +64,6 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
   const [ownerEmailInput, setOwnerEmailInput] = useState(settings.ownerEmail || 'ka8984510@gmail.com');
   const [logoPreview, setLogoPreview] = useState(settings.logoUrl || '');
   const [cropModalSrc, setCropModalSrc] = useState<string | null>(null);
-
-  // Clerk Auth Input
-  const [clerkKeyInput, setClerkKeyInput] = useState(settings.clerkPublishableKey || '');
 
   // Registered Students State
   const [registeredStudents, setRegisteredStudents] = useState<StudentUser[]>([]);
@@ -135,16 +131,7 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
         whatsAppNumber: whatsAppInput.trim() || '0324 9059918',
         ownerEmail: ownerEmailInput.trim() || 'ka8984510@gmail.com',
         logoUrl: logoPreview,
-        clerkPublishableKey: clerkKeyInput.trim(),
       };
-
-      if (clerkKeyInput.trim()) {
-        try {
-          localStorage.setItem('kainat_clerk_pub_key', clerkKeyInput.trim());
-        } catch {
-          // ignore
-        }
-      }
 
       const res = await apiSaveSettings(newSettings);
       if (res.success) {
@@ -360,18 +347,6 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
           >
             <Users className="w-3.5 h-3.5" />
             <span>Students ({registeredStudents.length})</span>
-          </button>
-
-          <button
-            onClick={() => { setActiveTab('clerk-auth'); setEditingNote(null); }}
-            className={`pb-2.5 px-3 font-semibold border-b-2 transition-colors cursor-pointer whitespace-nowrap flex items-center gap-1.5 ${
-              activeTab === 'clerk-auth'
-                ? 'border-purple-500 text-purple-400 font-bold'
-                : 'border-transparent text-zinc-400 hover:text-zinc-200'
-            }`}
-          >
-            <KeyRound className="w-3.5 h-3.5" />
-            <span>Google & Clerk Login</span>
           </button>
 
           <button
@@ -823,85 +798,7 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
             </div>
           )}
 
-          {/* TAB 4: CLERK & GOOGLE AUTHENTICATION */}
-          {activeTab === 'clerk-auth' && (
-            <div className="space-y-5 max-w-2xl">
-              <div className="p-4 rounded-xl bg-purple-500/10 border border-purple-500/20 space-y-2">
-                <div className="flex items-center gap-2">
-                  <ShieldCheck className="w-5 h-5 text-purple-400" />
-                  <h3 className="text-sm font-bold text-white">Clerk 1-Click Google Authentication</h3>
-                </div>
-                <p className="text-xs text-zinc-300 leading-relaxed">
-                  Students log into Kainat Notes Hub using their Google / Gmail account in 1 click. Zero OTP emails and zero passwords needed!
-                </p>
-              </div>
-
-              {/* Status Badge */}
-              <div className="flex items-center justify-between p-3.5 rounded-xl border border-zinc-800 bg-zinc-900/60">
-                <div className="flex items-center gap-2.5">
-                  <div className={`w-3 h-3 rounded-full ${clerkKeyInput.trim().startsWith('pk_') ? 'bg-emerald-500 animate-pulse' : 'bg-amber-500'}`} />
-                  <div>
-                    <div className="text-xs font-bold text-white">
-                      {clerkKeyInput.trim().startsWith('pk_') ? 'Clerk Active & Ready' : 'Environment Key or Input Supported'}
-                    </div>
-                    <div className="text-[11px] text-zinc-400">
-                      {clerkKeyInput.trim().startsWith('pk_')
-                        ? 'Students can sign in instantly with Google on any device.'
-                        : 'Set via deployment environment variable (CLERK_PUBLISHABLE_KEY) or enter below.'}
-                    </div>
-                  </div>
-                </div>
-
-                <a
-                  href="https://dashboard.clerk.com"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="px-3 py-1.5 rounded-lg text-xs font-semibold bg-purple-600 hover:bg-purple-500 text-white flex items-center gap-1"
-                >
-                  <span>Clerk Dashboard</span>
-                  <ExternalLink className="w-3 h-3" />
-                </a>
-              </div>
-
-              {/* Input Form */}
-              <div className="space-y-2">
-                <label className="block text-xs font-semibold text-zinc-300">
-                  Clerk Publishable Key (<code className="text-purple-400 font-mono">pk_test_...</code> or <code className="text-purple-400 font-mono">pk_live_...</code>)
-                </label>
-                <input
-                  type="text"
-                  value={clerkKeyInput}
-                  onChange={(e) => setClerkKeyInput(e.target.value)}
-                  placeholder="pk_test_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
-                  className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-3 py-2.5 text-xs text-white font-mono focus:outline-none focus:border-purple-500"
-                />
-                <p className="text-[11px] text-zinc-500">
-                  Can also be provided via <code className="text-purple-400">CLERK_PUBLISHABLE_KEY</code> in environment variables during deployment on Vercel or Cloudflare.
-                </p>
-              </div>
-
-              <button
-                type="button"
-                onClick={handleSaveSettings}
-                disabled={isSaving}
-                className="w-full py-3 px-4 bg-purple-600 hover:bg-purple-500 text-white font-bold text-xs rounded-xl shadow-lg transition-all cursor-pointer"
-              >
-                {isSaving ? 'Saving...' : 'Save & Activate Clerk Google Login'}
-              </button>
-
-              {/* Instructions */}
-              <div className="p-4 rounded-xl border border-zinc-800 bg-zinc-900/40 text-xs space-y-2">
-                <strong className="text-purple-400 block font-semibold">How to get your key in 2 minutes:</strong>
-                <ol className="list-decimal pl-4 space-y-1 text-zinc-400 text-[11px]">
-                  <li>Create or log into your account at <a href="https://dashboard.clerk.com" target="_blank" rel="noopener noreferrer" className="text-purple-400 hover:underline">dashboard.clerk.com</a>.</li>
-                  <li>In sidebar, go to <strong>User & Authentication &gt; Social Connections</strong> and verify <strong>Google</strong> is ON.</li>
-                  <li>Go to <strong>API Keys</strong> in sidebar, copy the <strong>Publishable Key</strong>, and set it in your environment or paste it above!</li>
-                </ol>
-              </div>
-            </div>
-          )}
-
-          {/* TAB 5: STORE BRANDING */}
+          {/* TAB 4: STORE BRANDING */}
           {activeTab === 'branding' && (
             <div className="space-y-5 max-w-2xl">
               <div className="space-y-3">

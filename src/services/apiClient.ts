@@ -6,6 +6,8 @@ const NOTES_KEY = 'kainat_notes_catalog';
 const ORDERS_KEY = 'kainat_orders_vault';
 const STUDENT_USER_KEY = 'kainat_student_user';
 const USERS_LIST_KEY = 'kainat_registered_students';
+const CATALOG_VERSION_KEY = 'kainat_catalog_version';
+const CURRENT_CATALOG_VERSION = 'v2026_canonical_catalog_v2';
 
 export const defaultSettings: SiteSettings = {
   siteName: 'Kainat Notes Hub',
@@ -36,12 +38,31 @@ export function saveStoredSettings(settings: SiteSettings): void {
   }
 }
 
+/**
+ * Standardized course catalog retrieval:
+ * Always keeps the canonical course catalog from initialNotesCatalog as the single source
+ * of truth across all browsers and devices. Merges newly created admin notes cleanly.
+ */
 export function getStoredNotes(): NoteItem[] {
   try {
+    const storedVer = localStorage.getItem(CATALOG_VERSION_KEY);
+    if (storedVer !== CURRENT_CATALOG_VERSION) {
+      // Flush stale or mismatched cache from older browser sessions
+      localStorage.setItem(CATALOG_VERSION_KEY, CURRENT_CATALOG_VERSION);
+      localStorage.setItem(NOTES_KEY, JSON.stringify(initialNotesCatalog));
+      return initialNotesCatalog;
+    }
+
     const raw = localStorage.getItem(NOTES_KEY);
     if (raw) {
       const parsed = JSON.parse(raw);
-      if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      if (Array.isArray(parsed) && parsed.length > 0) {
+        // Always preserve official canonical notes and append any custom notes created by admin
+        const customNotes = parsed.filter(
+          (p: NoteItem) => !initialNotesCatalog.some((init) => init.id === p.id)
+        );
+        return [...initialNotesCatalog, ...customNotes];
+      }
     }
   } catch {
     // ignore
@@ -52,6 +73,7 @@ export function getStoredNotes(): NoteItem[] {
 export function saveStoredNotes(notes: NoteItem[]): void {
   try {
     localStorage.setItem(NOTES_KEY, JSON.stringify(notes));
+    localStorage.setItem(CATALOG_VERSION_KEY, CURRENT_CATALOG_VERSION);
   } catch {
     // ignore
   }
@@ -92,6 +114,8 @@ export function saveStoredStudent(student: StudentUser | null): void {
   try {
     if (student) {
       localStorage.setItem(STUDENT_USER_KEY, JSON.stringify(student));
+      // Also sync to registered users list immediately
+      apiSyncUser(student).catch(() => {});
     } else {
       localStorage.removeItem(STUDENT_USER_KEY);
     }
@@ -108,9 +132,6 @@ export async function apiGetSettings(): Promise<SiteSettings> {
       const data = await res.json();
       if (data.success && data.settings) {
         saveStoredSettings(data.settings);
-        if (data.settings.clerkPublishableKey) {
-          localStorage.setItem('kainat_clerk_pub_key', data.settings.clerkPublishableKey);
-        }
         return data.settings;
       }
     }
@@ -130,7 +151,7 @@ export async function apiSaveSettings(settings: SiteSettings): Promise<{ success
     });
     if (res.ok) {
       const data = await res.json();
-      if (data.success) {
+      if (data.success && data.settings) {
         saveStoredSettings(data.settings);
         return data;
       }
@@ -199,7 +220,7 @@ export async function apiUpdateNote(note: NoteItem): Promise<NoteItem> {
       }
     }
   } catch {
-    // local fallback
+    // fallback
   }
   const current = getStoredNotes();
   const updated = current.map((n) => (n.id === note.id ? note : n));
@@ -214,7 +235,8 @@ export async function apiDeleteNote(id: string): Promise<boolean> {
     // ignore
   }
   const current = getStoredNotes();
-  saveStoredNotes(current.filter((n) => n.id !== id));
+  const updated = current.filter((n) => n.id !== id);
+  saveStoredNotes(updated);
   return true;
 }
 
@@ -235,91 +257,97 @@ export async function apiGetOrders(): Promise<Order[]> {
 }
 
 export async function apiCreateOrder(orderData: Partial<Order>): Promise<{ success: boolean; order: Order; message?: string }> {
+  const newOrder: Order = {
+    id: `KN-${Math.floor(1000 + Math.random() * 9000)}`,
+    studentName: orderData.studentName || 'Student',
+    studentEmail: (orderData.studentEmail || '').toLowerCase().trim(),
+    studentPhone: orderData.studentPhone || '',
+    noteIds: orderData.noteIds || [],
+    noteTitles: orderData.noteTitles || [],
+    totalAmountPKR: orderData.totalAmountPKR || 0,
+    paymentMethod: 'easypaisa',
+    easypaisaAccount: '03415892099',
+    trxId: orderData.trxId || '',
+    screenshotUrl: orderData.screenshotUrl || '',
+    status: 'pending',
+    createdAt: new Date().toISOString(),
+  };
+
+  // Sync student user immediately
+  if (newOrder.studentEmail) {
+    apiSyncUser({
+      name: newOrder.studentName,
+      email: newOrder.studentEmail,
+      phone: newOrder.studentPhone,
+    }).catch(() => {});
+  }
+
   try {
     const res = await fetch('/api/orders', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(orderData),
+      body: JSON.stringify(newOrder),
     });
     if (res.ok) {
       const data = await res.json();
       if (data.success && data.order) {
         const current = getStoredOrders();
         saveStoredOrders([data.order, ...current]);
-        return data;
+        return { success: true, order: data.order };
       }
     }
   } catch {
     // ignore
   }
-  const fakeOrder: Order = {
-    id: `KN-${Math.floor(1000 + Math.random() * 9000)}`,
-    studentName: orderData.studentName || 'Student',
-    studentEmail: orderData.studentEmail || 'student@gmail.com',
-    studentPhone: orderData.studentPhone || '03001234567',
-    noteIds: orderData.noteIds || [],
-    noteTitles: orderData.noteTitles || [],
-    totalAmountPKR: orderData.totalAmountPKR || 0,
-    paymentMethod: 'easypaisa',
-    easypaisaAccount: '03415892099',
-    trxId: orderData.trxId || '1234567890',
-    screenshotUrl: orderData.screenshotUrl || '',
-    status: 'pending',
-    createdAt: new Date().toISOString(),
-  };
+
   const current = getStoredOrders();
-  saveStoredOrders([fakeOrder, ...current]);
-  return { success: true, order: fakeOrder };
+  saveStoredOrders([newOrder, ...current]);
+  return { success: true, order: newOrder };
 }
 
-export async function apiVerifyOrder(orderId: string): Promise<{ success: boolean; order: Order }> {
+export async function apiVerifyOrder(orderId: string): Promise<Order | null> {
   try {
     const res = await fetch(`/api/orders/${orderId}/verify`, { method: 'PATCH' });
     if (res.ok) {
       const data = await res.json();
       if (data.success && data.order) {
         const current = getStoredOrders();
-        saveStoredOrders(current.map((o) => (o.id === orderId ? data.order : o)));
-        return data;
+        const updated = current.map((o) => (o.id === orderId ? data.order : o));
+        saveStoredOrders(updated);
+        return data.order;
       }
     }
   } catch {
-    // ignore
+    // fallback
   }
+
   const current = getStoredOrders();
   const order = current.find((o) => o.id === orderId);
   if (order) {
     order.status = 'verified';
     order.verifiedAt = new Date().toISOString();
     order.accessToken = `tok_${order.id.toLowerCase()}_access`;
-    saveStoredOrders([...current]);
-    return { success: true, order };
+    saveStoredOrders(current);
+    return order;
   }
-  throw new Error('Order not found');
+  return null;
 }
 
-export async function apiRejectOrder(orderId: string): Promise<{ success: boolean; order: Order }> {
+export async function apiRejectOrder(orderId: string): Promise<boolean> {
   try {
-    const res = await fetch(`/api/orders/${orderId}/reject`, { method: 'PATCH' });
-    if (res.ok) {
-      const data = await res.json();
-      if (data.success) {
-        const current = getStoredOrders();
-        saveStoredOrders(current.map((o) => (o.id === orderId ? data.order : o)));
-        return data;
-      }
-    }
+    await fetch(`/api/orders/${orderId}/reject`, { method: 'PATCH' });
   } catch {
-    // ignore
+    // fallback
   }
+
   const current = getStoredOrders();
   const order = current.find((o) => o.id === orderId);
   if (order) {
     order.status = 'rejected';
-    saveStoredOrders([...current]);
-    return { success: true, order };
+    saveStoredOrders(current);
+    return true;
   }
-  throw new Error('Order not found');
+  return false;
 }
 
 export async function apiLookupOrders(query: string): Promise<{ success: boolean; orders: Order[] }> {
@@ -327,13 +355,14 @@ export async function apiLookupOrders(query: string): Promise<{ success: boolean
     const res = await fetch(`/api/orders/lookup/${encodeURIComponent(query)}`);
     if (res.ok) {
       const data = await res.json();
-      if (data.success) return data;
+      if (data.success && Array.isArray(data.orders)) return data;
     }
   } catch {
     // fallback
   }
+
+  const q = query.trim().toLowerCase();
   const current = getStoredOrders();
-  const q = query.toLowerCase().trim();
   const matched = current.filter(
     (o) =>
       o.id.toLowerCase() === q ||
@@ -344,9 +373,12 @@ export async function apiLookupOrders(query: string): Promise<{ success: boolean
   return { success: true, orders: matched };
 }
 
+export const apiLookupOrder = apiLookupOrders;
+
 export async function apiGetStudentOrders(email: string): Promise<Order[]> {
+  const cleanEmail = email.trim().toLowerCase();
   try {
-    const res = await fetch(`/api/orders/student/${encodeURIComponent(email)}`);
+    const res = await fetch(`/api/orders/student/${encodeURIComponent(cleanEmail)}`);
     if (res.ok) {
       const data = await res.json();
       if (data.success && Array.isArray(data.orders)) return data.orders;
@@ -354,25 +386,11 @@ export async function apiGetStudentOrders(email: string): Promise<Order[]> {
   } catch {
     // fallback
   }
-  const current = getStoredOrders();
-  const matched = current.filter(
-    (o) => o.studentEmail.toLowerCase() === email.toLowerCase().trim() && o.status === 'verified'
-  );
-  return matched;
-}
 
-export async function apiLoginAdmin(username: string, password: string): Promise<{ success: boolean; token?: string; message?: string }> {
-  try {
-    const res = await fetch('/api/admin/login', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ username, password }),
-    });
-    const data = await res.json();
-    return data;
-  } catch (err: any) {
-    return { success: false, message: err.message || 'Login failed' };
-  }
+  const current = getStoredOrders();
+  return current.filter(
+    (o) => o.studentEmail.toLowerCase() === cleanEmail && o.status === 'verified'
+  );
 }
 
 export async function apiUploadFile(base64Data: string, prefix = 'upload'): Promise<{ success: boolean; url?: string; message?: string }> {
@@ -382,19 +400,24 @@ export async function apiUploadFile(base64Data: string, prefix = 'upload'): Prom
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ base64Data, prefix }),
     });
-    const data = await res.json();
-    return data;
-  } catch (err: any) {
-    return { success: false, message: err.message || 'Upload failed' };
+    if (res.ok) {
+      const data = await res.json();
+      if (data.success && data.url) return data;
+    }
+  } catch {
+    // fallback to data URI in serverless / static deployments
   }
+  return { success: true, url: base64Data };
 }
 
 export async function apiSyncUser(student: Partial<StudentUser>): Promise<{ success: boolean; user?: StudentUser }> {
+  const cleanEmail = (student.email || '').toLowerCase().trim();
+  if (!cleanEmail) return { success: false };
+
   // Store in in-app local storage immediately
   try {
     const raw = localStorage.getItem(USERS_LIST_KEY);
     const list: StudentUser[] = raw ? JSON.parse(raw) : [];
-    const cleanEmail = (student.email || '').toLowerCase().trim();
     const idx = list.findIndex((u) => u.email.toLowerCase().trim() === cleanEmail);
     const userObj: StudentUser = {
       id: idx >= 0 ? list[idx].id : `usr_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
@@ -427,27 +450,76 @@ export async function apiSyncUser(student: Partial<StudentUser>): Promise<{ succ
   return { success: true };
 }
 
+/**
+ * Universally retrieves registered students:
+ * Aggregates across registered users storage, placed orders, and currently logged in student.
+ * Guarantees student count is ALWAYS fresh, accurate, and refreshed in Admin Portal.
+ */
 export async function apiGetUsers(): Promise<StudentUser[]> {
+  const userMap = new Map<string, StudentUser>();
+
+  // 1. From USERS_LIST_KEY
+  try {
+    const raw = localStorage.getItem(USERS_LIST_KEY);
+    if (raw) {
+      const list: StudentUser[] = JSON.parse(raw);
+      list.forEach((u) => {
+        if (u.email) userMap.set(u.email.toLowerCase().trim(), u);
+      });
+    }
+  } catch {}
+
+  // 2. From Orders (every order placed belongs to a student!)
+  try {
+    const orders = getStoredOrders();
+    orders.forEach((o) => {
+      if (o.studentEmail) {
+        const email = o.studentEmail.toLowerCase().trim();
+        if (!userMap.has(email)) {
+          userMap.set(email, {
+            id: `usr_${email.replace(/[^a-zA-Z0-9]/g, '_')}`,
+            name: o.studentName || 'Student',
+            email: email,
+            phone: o.studentPhone || '',
+            verifiedAt: o.createdAt || new Date().toISOString(),
+          });
+        }
+      }
+    });
+  } catch {}
+
+  // 3. From Currently Stored Student
+  try {
+    const current = getStoredStudent();
+    if (current && current.email) {
+      const email = current.email.toLowerCase().trim();
+      const existing = userMap.get(email);
+      userMap.set(email, {
+        id: current.id || existing?.id || `usr_${Date.now()}`,
+        name: current.name || existing?.name || 'Student',
+        email: email,
+        phone: current.phone || existing?.phone || '',
+        verifiedAt: current.verifiedAt || existing?.verifiedAt || new Date().toISOString(),
+      });
+    }
+  } catch {}
+
+  // 4. Try server if available
   try {
     const res = await fetch('/api/users');
     if (res.ok) {
       const data = await res.json();
       if (data.success && Array.isArray(data.users)) {
-        try {
-          localStorage.setItem(USERS_LIST_KEY, JSON.stringify(data.users));
-        } catch {}
-        return data.users;
+        data.users.forEach((u: StudentUser) => {
+          if (u.email) userMap.set(u.email.toLowerCase().trim(), u);
+        });
       }
     }
-  } catch {
-    // ignore
-  }
-
-  // In-app storage fallback
-  try {
-    const raw = localStorage.getItem(USERS_LIST_KEY);
-    if (raw) return JSON.parse(raw);
   } catch {}
-  return [];
-}
 
+  const combined = Array.from(userMap.values());
+  try {
+    localStorage.setItem(USERS_LIST_KEY, JSON.stringify(combined));
+  } catch {}
+  return combined;
+}

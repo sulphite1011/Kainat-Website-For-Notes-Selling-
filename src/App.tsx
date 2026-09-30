@@ -22,8 +22,35 @@ import { StudentAuthModal } from './components/StudentAuthModal';
 import { AdminPortal } from './components/AdminPortal';
 import { RealtimeAlertBanner } from './components/RealtimeAlertBanner';
 import { Footer } from './components/Footer';
+import { useClerkConfig } from './context/ClerkContext';
+import { useUser } from '@clerk/clerk-react';
+
+// Internal bridge that automatically synchronizes Clerk signed-in Google user to app state
+const ClerkSyncBridge: React.FC<{
+  onSync: (student: StudentUser) => void;
+}> = ({ onSync }) => {
+  const { user, isSignedIn, isLoaded } = useUser();
+
+  useEffect(() => {
+    if (isLoaded && isSignedIn && user) {
+      const email = user.primaryEmailAddress?.emailAddress;
+      if (email) {
+        onSync({
+          id: user.id || `usr_${Date.now()}`,
+          name: user.fullName || user.firstName || 'Student',
+          email: email.toLowerCase().trim(),
+          phone: user.primaryPhoneNumber?.phoneNumber || '',
+          verifiedAt: new Date().toISOString(),
+        });
+      }
+    }
+  }, [isLoaded, isSignedIn, user, onSync]);
+
+  return null;
+};
 
 export const AppContent: React.FC = () => {
+  const { isConfigured } = useClerkConfig();
   const [activeTab, setActiveTab] = useState<'catalog' | 'library' | 'track' | 'matric' | 'fsc' | 'bsc'>('catalog');
   const [selectedCategory, setSelectedCategory] = useState<string>('All');
   const [notes, setNotes] = useState<NoteItem[]>([]);
@@ -113,13 +140,16 @@ export const AppContent: React.FC = () => {
 
     // If student was attempting to add a note to cart before signing in, fulfill it now
     if (pendingCartNote) {
+      const targetNote = pendingCartNote;
       setCartNotes((prev) => {
-        if (!prev.some((n) => n.id === pendingCartNote.id)) {
-          return [...prev, pendingCartNote];
+        if (!prev.some((n) => n.id === targetNote.id)) {
+          return [...prev, targetNote];
         }
         return prev;
       });
       setPendingCartNote(null);
+      setIsStudentAuthOpen(false);
+      setAuthModalPrompt(null);
     }
 
     try {
@@ -204,6 +234,9 @@ export const AppContent: React.FC = () => {
     <div className={`min-h-screen flex flex-col transition-colors duration-200 ${
       isLight ? 'bg-slate-50 text-slate-900' : 'bg-zinc-950 text-zinc-100'
     }`}>
+      {/* Clerk User Synchronization Bridge */}
+      {isConfigured && <ClerkSyncBridge onSync={handleStudentSync} />}
+
       {/* Navbar */}
       <Navbar
         cartCount={cartNotes.length}

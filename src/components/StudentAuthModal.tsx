@@ -23,9 +23,36 @@ const ClerkActiveAuthView: React.FC<{
   onStudentLoggedOut: () => void;
   title?: string;
   subtitle?: string;
-}> = ({ onClose, onStudentLoggedOut, subtitle }) => {
-  const { user, isSignedIn } = useUser();
+}> = ({ onClose, onStudentAuthenticated, onStudentLoggedOut, title, subtitle }) => {
+  const { user, isSignedIn, isLoaded } = useUser();
   const clerk = useClerk();
+
+  // Immediately synchronize student profile when signed in via Clerk
+  React.useEffect(() => {
+    if (isLoaded && isSignedIn && user) {
+      const email = user.primaryEmailAddress?.emailAddress;
+      if (email) {
+        const studentObj: StudentUser = {
+          id: user.id || `usr_${Date.now()}`,
+          name: user.fullName || user.firstName || 'Student',
+          email: email.toLowerCase().trim(),
+          phone: user.primaryPhoneNumber?.phoneNumber || '',
+          verifiedAt: new Date().toISOString(),
+        };
+        onStudentAuthenticated(studentObj);
+      }
+    }
+  }, [isLoaded, isSignedIn, user]);
+
+  // If user signed in because they clicked "Add to Cart", close automatically
+  React.useEffect(() => {
+    if (isLoaded && isSignedIn && user && title?.includes('Add to Cart')) {
+      const timer = setTimeout(() => {
+        onClose();
+      }, 300);
+      return () => clearTimeout(timer);
+    }
+  }, [isLoaded, isSignedIn, user, title]);
 
   const handleSignOut = async () => {
     try {
