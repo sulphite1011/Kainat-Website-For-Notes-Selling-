@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { NoteItem, Order, StudentUser } from '../types';
 import { X, Smartphone, CheckCircle2, ShieldCheck, Copy, Check, MessageSquare, AlertCircle, RefreshCw } from 'lucide-react';
-import { apiCreateOrder, saveStoredStudent } from '../services/apiClient';
+import { apiCreateOrder } from '../services/apiClient';
 
 interface CheckoutModalProps {
   isOpen: boolean;
@@ -82,14 +82,12 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
         `Assalam-o-Alaikum Kainat! I have placed Order #${data.order.id} on Kainat Notes Hub.%0A%0AStudent Name: ${data.order.studentName}%0AEmail: ${data.order.studentEmail}%0AEasyPaisa Trx ID: ${data.order.trxId}%0ATotal Amount: Rs. ${data.order.totalAmountPKR}%0A%0ACourses Ordered:%0A${notesListText}%0A%0APlease verify my payment and unlock my notes.`
       )}`;
 
-      // Save student for immediate device sync
       const studentObj: StudentUser = {
         email: studentEmail.trim().toLowerCase(),
         name: studentName.trim(),
         phone: studentPhone.trim(),
         verifiedAt: new Date().toISOString(),
       };
-      saveStoredStudent(studentObj);
       if (onStudentAuthenticated) {
         onStudentAuthenticated(studentObj);
       }

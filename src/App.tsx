@@ -4,8 +4,6 @@ import {
   apiGetSettings,
   apiGetNotes,
   apiGetOrders,
-  getStoredStudent,
-  saveStoredStudent,
   apiGetStudentOrders,
   apiSyncUser,
 } from './services/apiClient';
@@ -76,7 +74,7 @@ export const AppContent: React.FC = () => {
     ownerEmail: 'ka8984510@gmail.com',
   });
   const [cartNotes, setCartNotes] = useState<NoteItem[]>([]);
-  const [currentStudent, setCurrentStudent] = useState<StudentUser | null>(() => getStoredStudent());
+  const [currentStudent, setCurrentStudent] = useState<StudentUser | null>(null);
 
   // Modals
   const [previewNote, setPreviewNote] = useState<NoteItem | null>(null);
@@ -144,10 +142,9 @@ export const AppContent: React.FC = () => {
     }
   }, [activeTab]);
 
-  // Sync Student verified notes & MongoDB profile
+  // Sync Student verified notes & Clerk profile
   const handleStudentSync = async (student: StudentUser) => {
     setCurrentStudent(student);
-    saveStoredStudent(student);
     apiSyncUser(student).catch(() => {});
 
     // If student was attempting to add a note to cart before signing in, fulfill it now
@@ -181,7 +178,7 @@ export const AppContent: React.FC = () => {
 
   const handleStudentLoggedOut = () => {
     setCurrentStudent(null);
-    saveStoredStudent(null);
+    setCartNotes([]);
     setPendingCartNote(null);
   };
 

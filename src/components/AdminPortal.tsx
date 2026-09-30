@@ -16,6 +16,7 @@ import {
   Image,
   BookOpen,
   Plus,
+  Info,
 } from 'lucide-react';
 import {
   apiVerifyOrder,
@@ -371,7 +372,16 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
         )}
 
         {/* Content Body */}
-        <div className="flex-1 overflow-y-auto p-6">
+        <div className="flex-1 overflow-y-auto p-6 space-y-5">
+          {/* Static Deployment Transparency Notice */}
+          <div className="p-3.5 rounded-xl bg-blue-500/10 border border-blue-500/20 text-xs text-blue-200 flex items-start gap-2.5">
+            <Info className="w-4 h-4 text-blue-400 shrink-0 mt-0.5" />
+            <div className="leading-relaxed">
+              <span className="font-bold text-white">Master Catalog Architecture: </span>
+              In a static deployment without a database, master courses and default branding are defined in the project source (<code className="text-emerald-300 font-mono">src/data/notesCatalog.ts</code>) ensuring all browsers receive the same master catalog. In-portal changes update active session memory and the Node API server when connected.
+            </div>
+          </div>
+
           {/* TAB 1: ORDERS */}
           {activeTab === 'orders' && (
             <div className="space-y-4">
