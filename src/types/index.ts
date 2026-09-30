@@ -64,6 +64,7 @@ export interface StudentUser {
   id?: string;
   email: string;
   name: string;
+  avatarUrl?: string;
   phone?: string;
   verifiedAt?: string;
   orders?: Order[];

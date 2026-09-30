@@ -28,23 +28,29 @@ import { useUser } from '@clerk/clerk-react';
 // Internal bridge that automatically synchronizes Clerk signed-in Google user to app state
 const ClerkSyncBridge: React.FC<{
   onSync: (student: StudentUser) => void;
-}> = ({ onSync }) => {
+  onLogout: () => void;
+}> = ({ onSync, onLogout }) => {
   const { user, isSignedIn, isLoaded } = useUser();
 
   useEffect(() => {
-    if (isLoaded && isSignedIn && user) {
-      const email = user.primaryEmailAddress?.emailAddress;
-      if (email) {
-        onSync({
-          id: user.id || `usr_${Date.now()}`,
-          name: user.fullName || user.firstName || 'Student',
-          email: email.toLowerCase().trim(),
-          phone: user.primaryPhoneNumber?.phoneNumber || '',
-          verifiedAt: new Date().toISOString(),
-        });
+    if (isLoaded) {
+      if (isSignedIn && user) {
+        const email = user.primaryEmailAddress?.emailAddress;
+        if (email) {
+          onSync({
+            id: user.id || `usr_${Date.now()}`,
+            name: user.fullName || user.firstName || 'Student',
+            email: email.toLowerCase().trim(),
+            avatarUrl: user.imageUrl || '',
+            phone: user.primaryPhoneNumber?.phoneNumber || '',
+            verifiedAt: new Date().toISOString(),
+          });
+        }
+      } else if (!isSignedIn) {
+        onLogout();
       }
     }
-  }, [isLoaded, isSignedIn, user, onSync]);
+  }, [isLoaded, isSignedIn, user, onSync, onLogout]);
 
   return null;
 };
@@ -235,7 +241,7 @@ export const AppContent: React.FC = () => {
       isLight ? 'bg-slate-50 text-slate-900' : 'bg-zinc-950 text-zinc-100'
     }`}>
       {/* Clerk User Synchronization Bridge */}
-      {isConfigured && <ClerkSyncBridge onSync={handleStudentSync} />}
+      {isConfigured && <ClerkSyncBridge onSync={handleStudentSync} onLogout={handleStudentLoggedOut} />}
 
       {/* Navbar */}
       <Navbar
@@ -358,6 +364,12 @@ export const AppContent: React.FC = () => {
         onClose={() => {
           setIsStudentAuthOpen(false);
           setAuthModalPrompt(null);
+        }}
+        onGoToLibrary={() => {
+          setIsStudentAuthOpen(false);
+          setAuthModalPrompt(null);
+          setActiveTab('library');
+          window.scrollTo({ top: 0, behavior: 'smooth' });
         }}
         onStudentAuthenticated={handleStudentSync}
         onStudentLoggedOut={handleStudentLoggedOut}

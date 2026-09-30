@@ -38,6 +38,7 @@ const ClerkStudentSync: React.FC<{
           id: user.id,
           email: email.toLowerCase().trim(),
           name: user.fullName || user.firstName || 'Student',
+          avatarUrl: user.imageUrl || '',
           phone: user.primaryPhoneNumber?.phoneNumber || '',
           verifiedAt: new Date().toISOString(),
         };
@@ -53,8 +54,12 @@ const ClerkStudentSync: React.FC<{
 
 export const ClerkAuthProvider: React.FC<ClerkAuthProviderProps> = ({ children, onStudentSync }) => {
   const [publishableKey, setPublishableKey] = useState<string>(() => {
-    // 1. Env variable
-    const envKey = (import.meta as any).env?.VITE_CLERK_PUBLISHABLE_KEY;
+    // 1. Env variable (both VITE_ and CLERK_ keys supported)
+    const envKey =
+      (import.meta as any).env?.VITE_CLERK_PUBLISHABLE_KEY ||
+      (typeof process !== 'undefined'
+        ? (process.env as any)?.CLERK_PUBLISHABLE_KEY || (process.env as any)?.VITE_CLERK_PUBLISHABLE_KEY
+        : '');
     if (envKey && typeof envKey === 'string' && envKey.trim().startsWith('pk_')) {
       return envKey.trim();
     }

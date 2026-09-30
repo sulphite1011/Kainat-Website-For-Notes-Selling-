@@ -26,4 +26,8 @@ export default defineConfig({
     port: 3000,
     host: '0.0.0.0',
   },
+  define: {
+    'process.env.CLERK_PUBLISHABLE_KEY': JSON.stringify(process.env.CLERK_PUBLISHABLE_KEY || process.env.VITE_CLERK_PUBLISHABLE_KEY || ''),
+    'process.env.VITE_CLERK_PUBLISHABLE_KEY': JSON.stringify(process.env.CLERK_PUBLISHABLE_KEY || process.env.VITE_CLERK_PUBLISHABLE_KEY || ''),
+  },
 });

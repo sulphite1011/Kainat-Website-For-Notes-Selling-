@@ -141,16 +141,26 @@ export const StudentLibrary: React.FC<StudentLibraryProps> = ({
       {/* Account Status Card */}
       {currentStudent ? (
         <div className="p-3.5 rounded-xl border border-emerald-800/60 bg-emerald-950/20 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
-          <div className="flex items-center gap-2.5">
-            <div className="p-1.5 rounded-lg bg-emerald-500/20 text-emerald-400">
-              <ShieldCheck className="w-4 h-4" />
-            </div>
+          <div className="flex items-center gap-3">
+            {currentStudent.avatarUrl ? (
+              <img
+                src={currentStudent.avatarUrl}
+                alt={currentStudent.name}
+                className="w-10 h-10 rounded-full object-cover border-2 border-emerald-400 shrink-0 shadow"
+              />
+            ) : (
+              <div className="w-10 h-10 rounded-full bg-emerald-600 flex items-center justify-center text-white text-xs font-bold shrink-0 shadow">
+                {(currentStudent.name || 'S')[0].toUpperCase()}
+              </div>
+            )}
             <div>
-              <span className="text-zinc-400">Signed in as: </span>
-              <strong className="text-emerald-400 font-mono">{currentStudent.email}</strong>
-              <span className="text-[11px] text-zinc-500 block sm:inline sm:ml-2">
-                (Synced across this device & your mobile)
-              </span>
+              <div className="flex items-center gap-2">
+                <span className="font-bold text-white text-sm">{currentStudent.name}</span>
+                <span className="px-1.5 py-0.2 rounded text-[10px] bg-emerald-500/20 text-emerald-300 font-semibold flex items-center gap-1">
+                  <ShieldCheck className="w-3 h-3" /> Verified Student
+                </span>
+              </div>
+              <p className="text-emerald-400 font-mono text-xs">{currentStudent.email}</p>
             </div>
           </div>
 

@@ -151,7 +151,17 @@ export const Navbar: React.FC<NavbarProps> = ({
               title={currentStudent ? `Signed in as ${currentStudent.name} (${currentStudent.email})` : 'Student Login'}
             >
               {currentStudent ? (
-                <div className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse shrink-0" />
+                currentStudent.avatarUrl ? (
+                  <img
+                    src={currentStudent.avatarUrl}
+                    alt={currentStudent.name}
+                    className="w-5 h-5 rounded-full object-cover border border-emerald-400 shrink-0 shadow-sm"
+                  />
+                ) : (
+                  <div className="w-5 h-5 rounded-full bg-emerald-600 flex items-center justify-center text-white text-[10px] font-bold shrink-0 shadow-sm">
+                    {(currentStudent.name || 'S')[0].toUpperCase()}
+                  </div>
+                )
               ) : (
                 <User className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
               )}
