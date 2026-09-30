@@ -1,0 +1,72 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200" width="100%" height="100%">
+  <defs>
+    <linearGradient id="bgGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#047857" />
+      <stop offset="50%" stop-color="#059669" />
+      <stop offset="100%" stop-color="#10b981" />
+    </linearGradient>
+    <linearGradient id="capGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#064e3b" />
+      <stop offset="100%" stop-color="#022c22" />
+    </linearGradient>
+    <linearGradient id="goldGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#fef08a" />
+      <stop offset="50%" stop-color="#facc15" />
+      <stop offset="100%" stop-color="#ca8a04" />
+    </linearGradient>
+    <linearGradient id="pageGrad" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#ffffff" />
+      <stop offset="100%" stop-color="#ecfdf5" />
+    </linearGradient>
+    <filter id="shadow" x="-10%" y="-10%" width="120%" height="125%">
+      <feDropShadow dx="0" dy="4" stdDeviation="4" flood-color="#000000" flood-opacity="0.35" />
+    </filter>
+  </defs>
+
+  <!-- Rounded App Icon Background -->
+  <rect x="10" y="10" width="180" height="180" rx="42" fill="url(#bgGrad)" filter="url(#shadow)" />
+  <rect x="10" y="10" width="180" height="180" rx="42" fill="none" stroke="#6ee7b7" stroke-width="2.5" stroke-opacity="0.5" />
+
+  <!-- Inner Subtle Ring -->
+  <circle cx="100" cy="100" r="76" fill="none" stroke="#ffffff" stroke-width="1.5" stroke-opacity="0.2" stroke-dasharray="4 4" />
+
+  <!-- Open Book Group -->
+  <g transform="translate(0, 16)" filter="url(#shadow)">
+    <!-- Book Backing / Shadow -->
+    <path d="M 45 106 Q 100 118 100 134 Q 100 118 155 106 L 155 124 Q 100 136 100 152 Q 100 136 45 124 Z" fill="#065f46" opacity="0.7" />
+
+    <!-- Left Page -->
+    <path d="M 45 88 Q 72 82 100 96 L 100 138 Q 72 124 45 130 Z" fill="url(#pageGrad)" stroke="#10b981" stroke-width="1.5" />
+    <!-- Right Page -->
+    <path d="M 155 88 Q 128 82 100 96 L 100 138 Q 128 124 155 130 Z" fill="url(#pageGrad)" stroke="#10b981" stroke-width="1.5" />
+
+    <!-- Spine -->
+    <path d="M 98 94 L 102 94 L 102 140 L 98 140 Z" fill="#047857" />
+
+    <!-- Left Page Text Lines -->
+    <line x1="56" y1="99" x2="88" y2="103" stroke="#059669" stroke-width="2.5" stroke-linecap="round" />
+    <line x1="56" y1="108" x2="88" y2="112" stroke="#059669" stroke-width="2.5" stroke-linecap="round" />
+    <line x1="56" y1="117" x2="82" y2="121" stroke="#059669" stroke-width="2.5" stroke-linecap="round" />
+
+    <!-- Right Page Text Lines -->
+    <line x1="112" y1="103" x2="144" y2="99" stroke="#059669" stroke-width="2.5" stroke-linecap="round" />
+    <line x1="112" y1="112" x2="144" y2="108" stroke="#059669" stroke-width="2.5" stroke-linecap="round" />
+    <line x1="112" y1="121" x2="138" y2="117" stroke="#059669" stroke-width="2.5" stroke-linecap="round" />
+  </g>
+
+  <!-- Graduation Cap (Mortarboard) -->
+  <g transform="translate(0, -6)" filter="url(#shadow)">
+    <!-- Cap Base -->
+    <path d="M 82 58 Q 100 66 118 58 L 118 67 Q 100 75 82 67 Z" fill="#0f172a" />
+    <!-- Diamond Top -->
+    <polygon points="100,32 154,52 100,72 46,52" fill="url(#capGrad)" stroke="#34d399" stroke-width="1.5" />
+    <!-- Button Top -->
+    <ellipse cx="100" cy="52" rx="4" ry="2.5" fill="url(#goldGrad)" />
+    <!-- Tassel Ribbon & Ball -->
+    <path d="M 100 52 Q 132 58 138 76" fill="none" stroke="url(#goldGrad)" stroke-width="2.5" stroke-linecap="round" />
+    <circle cx="138" cy="78" r="3.5" fill="url(#goldGrad)" />
+  </g>
+
+  <!-- Golden Stars of Excellence -->
+  <path d="M 100 14 L 102 19 L 107 19 L 103 22 L 105 27 L 100 24 L 95 27 L 97 22 L 93 19 L 98 19 Z" fill="url(#goldGrad)" />
+</svg>

@@ -37,7 +37,7 @@ interface DatabaseSchema {
 const defaultSettings: SiteSettings = {
   siteName: 'Kainat Notes Hub',
   ownerName: 'Kainat',
-  logoUrl: '',
+  logoUrl: '/kainat_logo.svg',
   easyPaisaNumber: '03415892099',
   whatsAppNumber: '0324 9059918',
   ownerEmail: 'ka8984510@gmail.com',

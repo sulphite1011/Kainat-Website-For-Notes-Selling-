@@ -32,14 +32,15 @@ export const KainatLogo: React.FC<KainatLogoProps> = ({
     xl: 'text-xl font-black',
   };
 
-  const hasValidLogo = customLogoUrl && customLogoUrl.trim() !== '' && !imgError;
+  const effectiveLogoUrl = customLogoUrl && customLogoUrl.trim() !== '' ? customLogoUrl : '/kainat_logo.svg';
+  const hasValidLogo = !imgError && Boolean(effectiveLogoUrl);
 
   return (
     <div className={`flex items-center gap-2.5 select-none ${className}`}>
       {hasValidLogo ? (
         <div className={`relative rounded-full overflow-hidden border border-emerald-500/30 shadow-sm shrink-0 ${sizeClasses[size]}`}>
           <img
-            src={customLogoUrl}
+            src={effectiveLogoUrl}
             alt="Kainat Notes Hub Logo"
             className="w-full h-full object-cover"
             onError={() => setImgError(true)}

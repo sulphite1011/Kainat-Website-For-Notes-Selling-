@@ -155,7 +155,11 @@ export const Navbar: React.FC<NavbarProps> = ({
                   <img
                     src={currentStudent.avatarUrl}
                     alt={currentStudent.name}
+                    referrerPolicy="no-referrer"
                     className="w-5 h-5 rounded-full object-cover border border-emerald-400 shrink-0 shadow-sm"
+                    onError={(e) => {
+                      (e.currentTarget as HTMLElement).style.display = 'none';
+                    }}
                   />
                 ) : (
                   <div className="w-5 h-5 rounded-full bg-emerald-600 flex items-center justify-center text-white text-[10px] font-bold shrink-0 shadow-sm">

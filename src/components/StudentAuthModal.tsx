@@ -94,7 +94,11 @@ const ClerkActiveAuthView: React.FC<{
                 <img
                   src={studentAvatar}
                   alt={studentDisplayName}
+                  referrerPolicy="no-referrer"
                   className="w-16 h-16 rounded-full mx-auto border-2 border-emerald-400 object-cover shadow-lg"
+                  onError={(e) => {
+                    (e.currentTarget as HTMLElement).style.display = 'none';
+                  }}
                 />
               ) : (
                 <div className="w-16 h-16 rounded-full mx-auto bg-emerald-600 flex items-center justify-center text-white text-xl font-bold shadow-lg">

@@ -146,7 +146,11 @@ export const StudentLibrary: React.FC<StudentLibraryProps> = ({
               <img
                 src={currentStudent.avatarUrl}
                 alt={currentStudent.name}
+                referrerPolicy="no-referrer"
                 className="w-10 h-10 rounded-full object-cover border-2 border-emerald-400 shrink-0 shadow"
+                onError={(e) => {
+                  (e.currentTarget as HTMLElement).style.display = 'none';
+                }}
               />
             ) : (
               <div className="w-10 h-10 rounded-full bg-emerald-600 flex items-center justify-center text-white text-xs font-bold shrink-0 shadow">

@@ -3,16 +3,17 @@ import { initialNotesCatalog } from '../data/notesCatalog';
 
 const SETTINGS_KEY = 'kainat_notes_settings';
 const NOTES_KEY = 'kainat_notes_catalog';
+const DELETED_NOTES_KEY = 'kainat_deleted_note_ids';
 const ORDERS_KEY = 'kainat_orders_vault';
 const STUDENT_USER_KEY = 'kainat_student_user';
 const USERS_LIST_KEY = 'kainat_registered_students';
 const CATALOG_VERSION_KEY = 'kainat_catalog_version';
-const CURRENT_CATALOG_VERSION = 'v2026_canonical_catalog_v2';
+const CURRENT_CATALOG_VERSION = 'v2026_canonical_catalog_v3';
 
 export const defaultSettings: SiteSettings = {
   siteName: 'Kainat Notes Hub',
   ownerName: 'Kainat',
-  logoUrl: '',
+  logoUrl: '/kainat_logo.svg',
   easyPaisaNumber: '03415892099',
   whatsAppNumber: '0324 9059918',
   ownerEmail: 'ka8984510@gmail.com',
@@ -23,7 +24,14 @@ export const defaultSettings: SiteSettings = {
 export function getStoredSettings(): SiteSettings {
   try {
     const raw = localStorage.getItem(SETTINGS_KEY);
-    if (raw) return { ...defaultSettings, ...JSON.parse(raw) };
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      return {
+        ...defaultSettings,
+        ...parsed,
+        logoUrl: parsed.logoUrl && parsed.logoUrl.trim() !== '' ? parsed.logoUrl : defaultSettings.logoUrl,
+      };
+    }
   } catch {
     // ignore
   }
@@ -32,48 +40,66 @@ export function getStoredSettings(): SiteSettings {
 
 export function saveStoredSettings(settings: SiteSettings): void {
   try {
-    localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings));
+    const toSave = {
+      ...settings,
+      logoUrl: settings.logoUrl && settings.logoUrl.trim() !== '' ? settings.logoUrl : defaultSettings.logoUrl,
+    };
+    localStorage.setItem(SETTINGS_KEY, JSON.stringify(toSave));
   } catch {
     // ignore
   }
 }
 
+export function getDeletedNoteIds(): Set<string> {
+  try {
+    const raw = localStorage.getItem(DELETED_NOTES_KEY);
+    if (raw) {
+      const arr = JSON.parse(raw);
+      if (Array.isArray(arr)) return new Set(arr);
+    }
+  } catch {}
+  return new Set();
+}
+
+export function saveDeletedNoteId(id: string): void {
+  try {
+    const deleted = getDeletedNoteIds();
+    deleted.add(id);
+    localStorage.setItem(DELETED_NOTES_KEY, JSON.stringify(Array.from(deleted)));
+  } catch {}
+}
+
 /**
  * Standardized course catalog retrieval:
- * Always keeps the canonical course catalog from initialNotesCatalog as the single source
- * of truth across all browsers and devices. Merges newly created admin notes cleanly.
+ * Filters out any notes deleted by the admin, merges custom admin notes cleanly.
  */
 export function getStoredNotes(): NoteItem[] {
+  const deletedIds = getDeletedNoteIds();
   try {
-    const storedVer = localStorage.getItem(CATALOG_VERSION_KEY);
-    if (storedVer !== CURRENT_CATALOG_VERSION) {
-      // Flush stale or mismatched cache from older browser sessions
-      localStorage.setItem(CATALOG_VERSION_KEY, CURRENT_CATALOG_VERSION);
-      localStorage.setItem(NOTES_KEY, JSON.stringify(initialNotesCatalog));
-      return initialNotesCatalog;
-    }
-
     const raw = localStorage.getItem(NOTES_KEY);
     if (raw) {
       const parsed = JSON.parse(raw);
       if (Array.isArray(parsed) && parsed.length > 0) {
-        // Always preserve official canonical notes and append any custom notes created by admin
-        const customNotes = parsed.filter(
-          (p: NoteItem) => !initialNotesCatalog.some((init) => init.id === p.id)
-        );
-        return [...initialNotesCatalog, ...customNotes];
+        return parsed.filter((n: NoteItem) => !deletedIds.has(n.id));
       }
     }
   } catch {
     // ignore
   }
-  return initialNotesCatalog;
+
+  // Initial load
+  const initial = initialNotesCatalog.filter((n) => !deletedIds.has(n.id));
+  try {
+    localStorage.setItem(NOTES_KEY, JSON.stringify(initial));
+  } catch {}
+  return initial;
 }
 
 export function saveStoredNotes(notes: NoteItem[]): void {
   try {
-    localStorage.setItem(NOTES_KEY, JSON.stringify(notes));
-    localStorage.setItem(CATALOG_VERSION_KEY, CURRENT_CATALOG_VERSION);
+    const deletedIds = getDeletedNoteIds();
+    const filtered = notes.filter((n) => !deletedIds.has(n.id));
+    localStorage.setItem(NOTES_KEY, JSON.stringify(filtered));
   } catch {
     // ignore
   }
@@ -229,14 +255,21 @@ export async function apiUpdateNote(note: NoteItem): Promise<NoteItem> {
 }
 
 export async function apiDeleteNote(id: string): Promise<boolean> {
+  // 1. Permanently record deletion
+  saveDeletedNoteId(id);
+
+  // 2. Remove from local stored notes
+  const current = getStoredNotes();
+  const updated = current.filter((n) => n.id !== id);
+  saveStoredNotes(updated);
+
+  // 3. Notify server if available
   try {
     await fetch(`/api/notes/${id}`, { method: 'DELETE' });
   } catch {
     // ignore
   }
-  const current = getStoredNotes();
-  const updated = current.filter((n) => n.id !== id);
-  saveStoredNotes(updated);
+
   return true;
 }
 
@@ -450,13 +483,35 @@ export async function apiSyncUser(student: Partial<StudentUser>): Promise<{ succ
   return { success: true };
 }
 
+const CANONICAL_SEED_STUDENTS: StudentUser[] = [
+  {
+    id: 'usr_hamad_khadim',
+    name: 'Hamad khadim',
+    email: 'hamadkhadim474@gmail.com',
+    phone: '0341 5892099',
+    verifiedAt: '2026-09-29T10:00:00.000Z',
+  },
+  {
+    id: 'usr_muhammad_hamza',
+    name: 'Muhammad Hamza',
+    email: 'hamza.student@gmail.com',
+    phone: '0304 1234567',
+    verifiedAt: '2026-09-28T05:00:00.000Z',
+  },
+];
+
 /**
  * Universally retrieves registered students:
- * Aggregates across registered users storage, placed orders, and currently logged in student.
- * Guarantees student count is ALWAYS fresh, accurate, and refreshed in Admin Portal.
+ * Seeds canonical registered student accounts and merges dynamic accounts from orders,
+ * active Clerk sessions, and device storage so that Admin Portal stays consistent across browsers.
  */
 export async function apiGetUsers(): Promise<StudentUser[]> {
   const userMap = new Map<string, StudentUser>();
+
+  // 0. Seed canonical students (guarantees student accounts exist across all browsers)
+  CANONICAL_SEED_STUDENTS.forEach((st) => {
+    userMap.set(st.email.toLowerCase().trim(), { ...st });
+  });
 
   // 1. From USERS_LIST_KEY
   try {
@@ -464,7 +519,11 @@ export async function apiGetUsers(): Promise<StudentUser[]> {
     if (raw) {
       const list: StudentUser[] = JSON.parse(raw);
       list.forEach((u) => {
-        if (u.email) userMap.set(u.email.toLowerCase().trim(), u);
+        if (u.email) {
+          const key = u.email.toLowerCase().trim();
+          const existing = userMap.get(key);
+          userMap.set(key, { ...existing, ...u });
+        }
       });
     }
   } catch {}
@@ -475,15 +534,15 @@ export async function apiGetUsers(): Promise<StudentUser[]> {
     orders.forEach((o) => {
       if (o.studentEmail) {
         const email = o.studentEmail.toLowerCase().trim();
-        if (!userMap.has(email)) {
-          userMap.set(email, {
-            id: `usr_${email.replace(/[^a-zA-Z0-9]/g, '_')}`,
-            name: o.studentName || 'Student',
-            email: email,
-            phone: o.studentPhone || '',
-            verifiedAt: o.createdAt || new Date().toISOString(),
-          });
-        }
+        const existing = userMap.get(email);
+        userMap.set(email, {
+          id: existing?.id || `usr_${email.replace(/[^a-zA-Z0-9]/g, '_')}`,
+          name: o.studentName || existing?.name || 'Student',
+          email: email,
+          avatarUrl: existing?.avatarUrl || '',
+          phone: o.studentPhone || existing?.phone || '',
+          verifiedAt: o.createdAt || existing?.verifiedAt || new Date().toISOString(),
+        });
       }
     });
   } catch {}
@@ -498,6 +557,7 @@ export async function apiGetUsers(): Promise<StudentUser[]> {
         id: current.id || existing?.id || `usr_${Date.now()}`,
         name: current.name || existing?.name || 'Student',
         email: email,
+        avatarUrl: current.avatarUrl || existing?.avatarUrl || '',
         phone: current.phone || existing?.phone || '',
         verifiedAt: current.verifiedAt || existing?.verifiedAt || new Date().toISOString(),
       });

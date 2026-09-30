@@ -71,6 +71,7 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
 
   // Note Edit State
   const [editingNote, setEditingNote] = useState<Partial<NoteItem> | null>(null);
+  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
   const [isUploadingCover, setIsUploadingCover] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [statusMessage, setStatusMessage] = useState<{ text: string; error?: boolean } | null>(null);
@@ -256,10 +257,10 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
   };
 
   const handleDeleteNote = async (noteId: string) => {
-    if (!window.confirm('Are you sure you want to delete this course note?')) return;
     try {
+      setConfirmDeleteId(null);
       await apiDeleteNote(noteId);
-      showNotification('Note deleted from catalog.');
+      showNotification('Course note permanently deleted from catalog.');
       onRefreshData();
     } catch {
       showNotification('Failed to delete note.', true);
@@ -540,13 +541,28 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
                           >
                             <Edit2 className="w-3.5 h-3.5" />
                           </button>
-                          <button
-                            onClick={() => handleDeleteNote(note.id)}
-                            className="p-2 bg-zinc-900 hover:bg-zinc-800 text-rose-400 rounded-lg cursor-pointer"
-                            title="Delete"
-                          >
-                            <Trash2 className="w-3.5 h-3.5" />
-                          </button>
+                          {confirmDeleteId === note.id ? (
+                            <button
+                              type="button"
+                              onClick={() => handleDeleteNote(note.id)}
+                              className="px-2.5 py-1.5 bg-rose-600 hover:bg-rose-500 text-white font-bold text-xs rounded-lg cursor-pointer animate-pulse transition-all shadow"
+                              title="Click to confirm permanent deletion"
+                            >
+                              Delete?
+                            </button>
+                          ) : (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setConfirmDeleteId(note.id);
+                                setTimeout(() => setConfirmDeleteId((prev) => (prev === note.id ? null : prev)), 4000);
+                              }}
+                              className="p-2 bg-zinc-900 hover:bg-rose-950/60 hover:text-rose-400 text-zinc-400 rounded-lg cursor-pointer transition-colors"
+                              title="Delete Course Note"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          )}
                         </div>
                       </div>
                     ))}
@@ -767,9 +783,21 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
                   {registeredStudents.map((st) => (
                     <div key={st.id || st.email} className="p-4 flex items-center justify-between gap-4">
                       <div className="flex items-center gap-3">
-                        <div className="w-10 h-10 rounded-full bg-emerald-600/20 text-emerald-400 flex items-center justify-center font-bold text-sm border border-emerald-500/30">
-                          {(st.name || st.email)[0].toUpperCase()}
-                        </div>
+                        {st.avatarUrl ? (
+                          <img
+                            src={st.avatarUrl}
+                            alt={st.name}
+                            referrerPolicy="no-referrer"
+                            className="w-10 h-10 rounded-full object-cover border border-emerald-400/50 shadow shrink-0"
+                            onError={(e) => {
+                              (e.currentTarget as HTMLElement).style.display = 'none';
+                            }}
+                          />
+                        ) : (
+                          <div className="w-10 h-10 rounded-full bg-emerald-600/20 text-emerald-400 flex items-center justify-center font-bold text-sm border border-emerald-500/30 shrink-0">
+                            {(st.name || st.email)[0].toUpperCase()}
+                          </div>
+                        )}
                         <div>
                           <h4 className="text-sm font-bold text-white">{st.name || 'Student'}</h4>
                           <p className="text-xs text-emerald-400 font-mono">{st.email}</p>
