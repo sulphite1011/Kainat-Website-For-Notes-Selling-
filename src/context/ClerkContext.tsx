@@ -3,6 +3,8 @@ import { ClerkProvider, useUser } from '@clerk/clerk-react';
 import { StudentUser } from '../types';
 import { getStoredSettings, saveStoredSettings } from '../services/apiClient';
 
+declare const __CLERK_KEY__: string | undefined;
+
 interface ClerkContextValue {
   publishableKey: string;
   isConfigured: boolean;
@@ -34,11 +36,18 @@ const ClerkStudentSync: React.FC<{
     if (isLoaded && isSignedIn && user) {
       const email = user.primaryEmailAddress?.emailAddress;
       if (email) {
+        // Retrieve Google avatar reliably from user.imageUrl or externalAccounts
+        const googleAvatar =
+          user.imageUrl ||
+          (user.externalAccounts?.find((a) => a.provider === 'google') as any)?.avatarUrl ||
+          user.externalAccounts?.find((a) => a.provider === 'google')?.imageUrl ||
+          '';
+
         const studentObj: StudentUser = {
           id: user.id,
           email: email.toLowerCase().trim(),
           name: user.fullName || user.firstName || 'Student',
-          avatarUrl: user.imageUrl || '',
+          avatarUrl: googleAvatar,
           phone: user.primaryPhoneNumber?.phoneNumber || '',
           verifiedAt: new Date().toISOString(),
         };
@@ -47,19 +56,30 @@ const ClerkStudentSync: React.FC<{
         }
       }
     }
-  }, [isLoaded, isSignedIn, user]);
+  }, [isLoaded, isSignedIn, user, onStudentSync]);
 
   return null;
 };
 
 export const ClerkAuthProvider: React.FC<ClerkAuthProviderProps> = ({ children, onStudentSync }) => {
   const [publishableKey, setPublishableKey] = useState<string>(() => {
-    // 1. Env variable (both VITE_ and CLERK_ keys supported)
-    const envKey =
-      (import.meta as any).env?.VITE_CLERK_PUBLISHABLE_KEY ||
-      (typeof process !== 'undefined'
-        ? (process.env as any)?.CLERK_PUBLISHABLE_KEY || (process.env as any)?.VITE_CLERK_PUBLISHABLE_KEY
-        : '');
+    // 1. Injected at Vite build time (__CLERK_KEY__, CLERK_PUBLISHABLE_KEY, VITE_CLERK_PUBLISHABLE_KEY)
+    let envKey = '';
+    try {
+      if (typeof __CLERK_KEY__ !== 'undefined' && __CLERK_KEY__) {
+        envKey = __CLERK_KEY__;
+      }
+    } catch {}
+
+    if (!envKey) {
+      envKey =
+        (import.meta as any).env?.CLERK_PUBLISHABLE_KEY ||
+        (import.meta as any).env?.VITE_CLERK_PUBLISHABLE_KEY ||
+        (typeof process !== 'undefined'
+          ? (process.env as any)?.CLERK_PUBLISHABLE_KEY || (process.env as any)?.VITE_CLERK_PUBLISHABLE_KEY
+          : '');
+    }
+
     if (envKey && typeof envKey === 'string' && envKey.trim().startsWith('pk_')) {
       return envKey.trim();
     }

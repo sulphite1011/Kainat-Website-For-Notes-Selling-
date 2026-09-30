@@ -36,12 +36,18 @@ const ClerkSyncBridge: React.FC<{
     if (isLoaded) {
       if (isSignedIn && user) {
         const email = user.primaryEmailAddress?.emailAddress;
+        const googleAvatar =
+          user.imageUrl ||
+          (user.externalAccounts?.find((a) => a.provider === 'google') as any)?.avatarUrl ||
+          user.externalAccounts?.find((a) => a.provider === 'google')?.imageUrl ||
+          '';
+
         if (email) {
           onSync({
             id: user.id || `usr_${Date.now()}`,
             name: user.fullName || user.firstName || 'Student',
             email: email.toLowerCase().trim(),
-            avatarUrl: user.imageUrl || '',
+            avatarUrl: googleAvatar,
             phone: user.primaryPhoneNumber?.phoneNumber || '',
             verifiedAt: new Date().toISOString(),
           });

@@ -1,6 +1,6 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { StudentUser } from '../types';
-import { X, ShieldCheck, CheckCircle2, LogOut, BookOpen } from 'lucide-react';
+import { X, ShieldCheck, CheckCircle2, LogOut, BookOpen, KeyRound, ArrowRight } from 'lucide-react';
 import { useClerkConfig } from '../context/ClerkContext';
 import { useUser, useClerk, SignInButton } from '@clerk/clerk-react';
 
@@ -33,11 +33,18 @@ const ClerkActiveAuthView: React.FC<{
     if (isLoaded && isSignedIn && user) {
       const email = user.primaryEmailAddress?.emailAddress;
       if (email) {
+        // Robust extraction of Google DP avatar
+        const googleAvatar =
+          user.imageUrl ||
+          (user.externalAccounts?.find((a) => a.provider === 'google') as any)?.avatarUrl ||
+          user.externalAccounts?.find((a) => a.provider === 'google')?.imageUrl ||
+          '';
+
         const studentObj: StudentUser = {
           id: user.id || `usr_${Date.now()}`,
           name: user.fullName || user.firstName || 'Student',
           email: email.toLowerCase().trim(),
-          avatarUrl: user.imageUrl || '',
+          avatarUrl: googleAvatar,
           phone: user.primaryPhoneNumber?.phoneNumber || '',
           verifiedAt: new Date().toISOString(),
         };
@@ -66,7 +73,13 @@ const ClerkActiveAuthView: React.FC<{
     onClose();
   };
 
-  const studentAvatar = user?.imageUrl || currentStudent?.avatarUrl;
+  const studentAvatar =
+    user?.imageUrl ||
+    (user?.externalAccounts?.find((a) => a.provider === 'google') as any)?.avatarUrl ||
+    user?.externalAccounts?.find((a) => a.provider === 'google')?.imageUrl ||
+    currentStudent?.avatarUrl ||
+    '';
+
   const studentDisplayName = user?.fullName || user?.firstName || currentStudent?.name || 'Student';
   const studentEmail = user?.primaryEmailAddress?.emailAddress || currentStudent?.email || '';
 
@@ -175,6 +188,72 @@ const ClerkActiveAuthView: React.FC<{
   );
 };
 
+// Panel shown when Clerk publishable key has not yet loaded from environment
+const UnconfiguredClerkView: React.FC<{
+  onClose: () => void;
+}> = ({ onClose }) => {
+  const { saveKey } = useClerkConfig();
+  const [inputKey, setInputKey] = useState('');
+  const [saving, setSaving] = useState(false);
+
+  const handleConnect = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const trimmed = inputKey.trim();
+    if (!trimmed.startsWith('pk_')) return;
+    setSaving(true);
+    await saveKey(trimmed);
+    setSaving(false);
+  };
+
+  return (
+    <div className="space-y-4 py-1">
+      <div className="p-3.5 rounded-xl bg-purple-500/10 border border-purple-500/20 space-y-1.5 text-center">
+        <h3 className="text-xs font-bold text-white flex items-center justify-center gap-1.5">
+          <KeyRound className="w-3.5 h-3.5 text-purple-400" />
+          <span>Google 1-Click Login</span>
+        </h3>
+        <p className="text-[11px] text-zinc-300 leading-relaxed">
+          Google Login connects via Clerk. If already added to Cloudflare Pages, please trigger a <strong>Retry deployment</strong> so Cloudflare rebuilds with your variable.
+        </p>
+      </div>
+
+      <form onSubmit={handleConnect} className="space-y-2">
+        <label className="block text-[11px] font-semibold text-zinc-300">
+          Or paste your Clerk Publishable Key for instant connection:
+        </label>
+        <div className="flex gap-2">
+          <input
+            type="text"
+            value={inputKey}
+            onChange={(e) => setInputKey(e.target.value)}
+            placeholder="pk_test_... or pk_live_..."
+            className="flex-1 bg-zinc-900 border border-zinc-800 rounded-xl px-3 py-2 text-xs text-white font-mono placeholder-zinc-600 focus:outline-none focus:border-purple-500"
+          />
+          <button
+            type="submit"
+            disabled={!inputKey.trim().startsWith('pk_') || saving}
+            className="px-3 py-2 bg-purple-600 hover:bg-purple-500 disabled:opacity-40 text-white font-bold text-xs rounded-xl transition-all cursor-pointer whitespace-nowrap flex items-center gap-1"
+          >
+            <span>{saving ? 'Saving...' : 'Connect'}</span>
+            <ArrowRight className="w-3.5 h-3.5" />
+          </button>
+        </div>
+        <p className="text-[10px] text-zinc-500">
+          Keys start with <code className="text-purple-400 font-mono">pk_test_</code> or <code className="text-purple-400 font-mono">pk_live_</code> from dashboard.clerk.com.
+        </p>
+      </form>
+
+      <button
+        type="button"
+        onClick={onClose}
+        className="w-full py-2 bg-zinc-900 hover:bg-zinc-800 text-zinc-400 text-xs font-semibold rounded-xl transition-colors cursor-pointer"
+      >
+        Close
+      </button>
+    </div>
+  );
+};
+
 export const StudentAuthModal: React.FC<StudentAuthModalProps> = ({
   isOpen,
   currentStudent,
@@ -227,22 +306,7 @@ export const StudentAuthModal: React.FC<StudentAuthModalProps> = ({
             subtitle={subtitle}
           />
         ) : (
-          <div className="space-y-4 py-2 text-center">
-            <div className="p-4 rounded-xl bg-amber-500/10 border border-amber-500/20 space-y-2">
-              <p className="text-xs text-amber-200 font-semibold">
-                Google Login is ready to connect.
-              </p>
-              <p className="text-[11px] text-zinc-400 leading-relaxed">
-                Please set <code className="text-amber-400 font-mono">CLERK_PUBLISHABLE_KEY</code> in your Cloudflare Pages or host environment variables to enable 1-click Google Sign In.
-              </p>
-            </div>
-            <button
-              onClick={onClose}
-              className="w-full py-2.5 px-4 bg-zinc-800 hover:bg-zinc-700 text-white font-semibold text-xs rounded-xl transition-all cursor-pointer"
-            >
-              Close
-            </button>
-          </div>
+          <UnconfiguredClerkView onClose={onClose} />
         )}
       </div>
     </div>
